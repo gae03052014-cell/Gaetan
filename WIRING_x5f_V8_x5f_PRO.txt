@@ -1,0 +1,52 @@
+
+BikeGuard V8 PRO - Câblage COMPLET + Batterie + MPU INT
+
+NOUVEAUTÉS V8 :
+- Batterie LiPo mesurée via diviseur sur GPIO2
+- MPU INT -> GPIO3 pour wake deep sleep
+- Buzzer patterns intelligents
+- OTA WiFi
+
+CÂBLAGE :
+
+1. MPU6050
+   VCC -> 3.3V
+   GND -> GND commun
+   SDA -> GPIO4 (bleu)
+   SCL -> GPIO5 (jaune)
+   INT -> GPIO3 (blanc) NOUVEAU V8 !
+
+2. Batterie LiPo 1S 3.7V 18650 3000mAh
+   + Batterie -> TP4056 IN+ (charge)
+   - Batterie -> TP4056 IN-
+   TP4056 OUT+ -> 3.3V ESP32 + VCC MPU + Buzzer +
+   TP4056 OUT- -> GND commun
+   Mesure batterie :
+   OUT+ --[100k]-- GPIO2 --[100k]-- GND
+
+3. Buzzer actif
+   + -> GPIO6 (orange)
+   - -> GND
+
+4. Boutons (INPUT_PULLUP)
+   SOS Rouge : GPIO7 <-> GND
+   STOP Vert : GPIO10 <-> GND
+   Maintenir SOS 3s au boot = mode OTA WiFi
+
+5. (Optionnel) GPS NEO-6M
+   VCC->3.3V, GND->GND, TX->GPIO20, RX->GPIO21
+
+6. (Optionnel) Boîtier
+   Imprimer boîtier 60x40x25mm avec support vélo
+   Mettre mousse anti-vibration sous MPU
+
+TEST V8 :
+- Au boot : 2 bips = MPU OK + calibré
+- Connexion BLE : 3 bips
+- SOS : mélodie ...---...
+- Batterie <20% : 5 bips courts toutes les minutes
+
+Seuils V8 recommandés :
+- Vélo route : G 2.8, Angle 60°
+- VTT : G 3.5, Angle 70°
+- Ville : G 2.5, Angle 55°
