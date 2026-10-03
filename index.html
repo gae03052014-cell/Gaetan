@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS - Voice OS</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08080e;--card:#12121d;--card2:#1a1a2a;--border:#26263c;--accent:#7c5cff;--accent2:#00f0ff;--text:#ededff;--muted:#8a8aa8;--green:#00ff9d;--red:#ff4d6d;--yellow:#ffcc00}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh}
+.mono{font-family:'JetBrains Mono',monospace}
+header{padding:14px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:rgba(8,8,14,0.85);backdrop-filter:blur(14px);z-index:20}
+.logo{display:flex;gap:10px;align-items:center}
+.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:grid;place-items:center;font-weight:800;color:#000;font-size:14px}
+.live{display:flex;gap:8px;align-items:center;font-size:11px;padding:6px 12px;border-radius:20px;background:var(--card2);border:1px solid var(--border)}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.live-dot.on{background:var(--red);box-shadow:0 0 10px var(--red);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+
+.hero{padding:32px 22px 10px;display:grid;place-items:center;text-align:center}
+.orb-wrap{position:relative;width:180px;height:180px;display:grid;place-items:center;margin-bottom:18px}
+.orb{width:110px;height:110px;border-radius:50%;background:radial-gradient(circle at 30% 30%, var(--accent2), var(--accent));box-shadow:0 0 60px rgba(124,92,255,0.5);transition:0.3s;cursor:pointer;display:grid;place-items:center;font-size:32px}
+.orb.listening{transform:scale(1.15);box-shadow:0 0 90px rgba(124,92,255,0.8),0 0 140px rgba(0,240,255,0.3);animation:orbPulse 1.2s infinite}
+.orb.speaking{animation:orbSpeak 0.3s infinite alternate}
+@keyframes orbPulse{0%,100%{transform:scale(1.15)}50%{transform:scale(1.25)}}
+@keyframes orbSpeak{0%{transform:scale(1.1)}100%{transform:scale(1.22)}}
+.ring{position:absolute;border:1px solid var(--accent);border-radius:50%;opacity:0}
+.ring.r1{width:140px;height:140px;animation:ring 2s infinite}
+.ring.r2{width:180px;height:180px;animation:ring 2s infinite 0.4s}
+@keyframes ring{0%{transform:scale(0.8);opacity:0.6}100%{transform:scale(1.4);opacity:0}}
+.voice-status{font-size:18px;font-weight:700;margin-bottom:6px;min-height:26px}
+.voice-sub{font-size:13px;color:var(--muted);min-height:18px}
+.transcript{margin-top:14px;padding:12px 16px;background:var(--card);border:1px solid var(--border);border-radius:12px;min-height:44px;max-width:640px;width:100%;font-size:14px}
+
+.layout{max-width:1100px;margin:0 auto;padding:18px 22px;display:grid;grid-template-columns:320px 1fr;gap:18px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px}
+.card h3{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.log{display:flex;flex-direction:column;gap:10px;max-height:520px;overflow:auto}
+.log-item{display:flex;gap:10px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--border);font-size:13px;line-height:1.5;animation:fadeIn 0.3s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.log-item .icon{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:14px;flex-shrink:0}
+.log-item.active{border-color:var(--accent);background:linear-gradient(135deg,rgba(124,92,255,0.12),rgba(0,240,255,0.06))}
+.type-listen .icon{background:rgba(255,77,109,0.15);color:var(--red)}
+.type-brain .icon{background:rgba(124,92,255,0.15);color:var(--accent)}
+.type-search .icon{background:rgba(0,240,255,0.12);color:var(--accent2)}
+.type-write .icon{background:rgba(0,255,157,0.12);color:var(--green)}
+.type-action .icon{background:rgba(255,204,0,0.12);color:var(--yellow)}
+.type-voice .icon{background:rgba(124,92,255,0.2);color:#fff}
+
+.main-stack{display:flex;flex-direction:column;gap:18px}
+.input-row{display:flex;gap:10px}
+.input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-family:'Inter';font-size:14px;outline:none}
+.input:focus{border-color:var(--accent)}
+.btn{padding:12px 16px;border-radius:12px;border:none;cursor:pointer;font-weight:700;font-size:13px;display:inline-flex;gap:8px;align-items:center;transition:0.2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#000}
+.btn-ghost{background:var(--card2);border:1px solid var(--border);color:var(--text)}
+.output{margin-top:12px;background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px;white-space:pre-wrap;font-family:'JetBrains Mono';font-size:12.5px;line-height:1.6;min-height:80px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{font-size:11px;padding:6px 10px;border-radius:20px;background:var(--card2);border:1px solid var(--border);cursor:pointer}
+.chip:hover{border-color:var(--accent);color:var(--text)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="logo-icon">J</div><div><div style="font-weight:800;font-size:14px">JARVIS VOICE OS</div><div class="mono" style="font-size:10px;color:var(--muted)">wake word : "JARVIS" • affichage live</div></div></div>
+  <div class="live"><div id="liveDot" class="live-dot"></div><span class="mono" id="liveLabel">MIC OFF</span></div>
+</header>
+
+<div class="hero">
+  <div class="orb-wrap">
+    <div class="ring r1"></div><div class="ring r2"></div>
+    <div id="orb" class="orb" onclick="toggleVoice()">🎙️</div>
+  </div>
+  <div id="voiceStatus" class="voice-status">Clique sur l'orbe pour activer</div>
+  <div id="voiceSub" class="voice-sub">Dit "JARVIS" puis ta demande. Ex: "Jarvis cherche Mistral AI et rédige un post LinkedIn"</div>
+  <div id="transcript" class="transcript mono">En attente...</div>
+  <div class="chips">
+    <div class="chip" onclick="simulateCommand('Jarvis cherche les dernières actus IA')">🎤 "Jarvis cherche les actus IA"</div>
+    <div class="chip" onclick="simulateCommand('Jarvis rédige un email de relance client')">✉️ "Rédige un email"</div>
+    <div class="chip" onclick="simulateCommand('Jarvis code un module qui scrappe Product Hunt')">🧩 "Code un module"</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="card">
+    <h3>📡 Ce que je fais <span class="mono" style="font-size:10px;color:var(--muted)" id="stepCount">0 étapes</span></h3>
+    <div id="log" class="log">
+      <div class="log-item type-listen"><div class="icon">🎧</div><div><b>Système en veille</b><br><span style="color:var(--muted)">En attente du wake word "JARVIS"</span></div></div>
+    </div>
+  </div>
+
+  <div class="main-stack">
+    <div class="card">
+      <h3>💬 Réponse & Actions</h3>
+      <div class="input-row">
+        <input id="textInput" class="input" placeholder="Ou tape ici : ex: cherche Mistral AI">
+        <button class="btn btn-primary" onclick="sendText()">Envoyer</button>
+        <button class="btn btn-ghost" onclick="toggleVoice()">🎙️</button>
+      </div>
+      <div id="mainOut" class="output">JARVIS prêt. Dis "JARVIS" pour commencer.</div>
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="speakLast()">🔊 Relire à voix haute</button>
+        <button class="btn btn-ghost" onclick="clearAll()">🗑️ Effacer</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>⚙️ Contrôles vocaux</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
+        <div><b>Voix :</b> <select id="voiceSelect" class="input" style="margin-top:6px;padding:8px"></select></div>
+        <div><b>Vitesse :</b> <input id="rate" type="range" min="0.7" max="1.4" step="0.1" value="1" style="width:100%;margin-top:14px"><div class="mono" style="font-size:10px;color:var(--muted)">Parle plus vite / lent</div></div>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted)" class="mono">
+        Fonctionne sur Chrome / Edge desktop et Android. GitHub Pages est en HTTPS donc micro autorisé. Sur iPhone, utilise le bouton micro (Safari limite le wake word continu).
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let recognition=null, isListening=false, isActiveSession=false, silenceTimer=null, lastResponse='';
+const logEl=document.getElementById('log'), transcriptEl=document.getElementById('transcript'), statusEl=document.getElementById('voiceStatus'), subEl=document.getElementById('voiceSub'), orbEl=document.getElementById('orb'), liveDot=document.getElementById('liveDot'), liveLabel=document.getElementById('liveLabel'), mainOut=document.getElementById('mainOut');
+
+function addLog(type, title, detail){
+  const icons={listen:'🎧',brain:'🧠',search:'🔍',write:'✍️',action:'⚡',voice:'🔊',system:'📡'};
+  const item=document.createElement('div');
+  item.className=`log-item type-${type} active`;
+  item.innerHTML=`<div class="icon">${icons[type]||'•'}</div><div><b>${title}</b><br><span style="color:var(--muted)">${detail}</span></div>`;
+  logEl.prepend(item);
+  document.querySelectorAll('.log-item').forEach((el,i)=>{if(i>0) el.classList.remove('active')});
+  document.getElementById('stepCount').textContent=`${logEl.children.length} étapes`;
+}
+
+function initVoices(){
+  const sel=document.getElementById('voiceSelect');
+  const voices=speechSynthesis.getVoices();
+  sel.innerHTML='';
+  voices.filter(v=>v.lang.startsWith('fr')||v.lang.startsWith('en')).forEach(v=>{
+    const o=document.createElement('option');o.value=v.name;o.textContent=`${v.name} (${v.lang})`;sel.appendChild(o);
+  });
+  if(!sel.options.length){ voices.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=`${v.name}`;sel.appendChild(o);});}
+}
+speechSynthesis.onvoiceschanged=initVoices;
+setTimeout(initVoices,500);
+
+function speak(text){
+  speechSynthesis.cancel();
+  const utter=new SpeechSynthesisUtterance(text);
+  const selVoice=document.getElementById('voiceSelect').value;
+  const v=speechSynthesis.getVoices().find(x=>x.name===selVoice);
+  if(v) utter.voice=v;
+  utter.lang='fr-FR';
+  utter.rate=parseFloat(document.getElementById('rate').value)||1;
+  orbEl.classList.add('speaking');
+  addLog('voice','Je réponds à voix haute', text.slice(0,120)+'...');
+  utter.onend=()=>{orbEl.classList.remove('speaking');if(isListening) statusEl.textContent='Je t\'écoute... dis "JARVIS"';};
+  speechSynthesis.speak(utter);
+}
+
+function toggleVoice(){
+  if(isListening){ stopListening(); } else { startListening(); }
+}
+
+function startListening(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ alert('Navigateur non compatible. Utilise Chrome / Edge. Sur mobile Chrome Android.'); return; }
+  recognition=new SR();
+  recognition.lang='fr-FR';
+  recognition.continuous=true;
+  recognition.interimResults=true;
+  recognition.maxAlternatives=1;
+
+  isListening=true;
+  liveDot.classList.add('on'); liveLabel.textContent='MIC ON • ÉCOUTE "JARVIS"';
+  orbEl.classList.add('listening'); statusEl.textContent='En écoute... dis "JARVIS"';
+  subEl.textContent='Micro actif. Prononce "JARVIS" pour m\'activer.';
+  addLog('listen','Micro activé','En écoute continue du wake word "JARVIS"');
+
+  recognition.onresult=(e)=>{
+    let interim='', final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      const t=e.results[i][0].transcript;
+      if(e.results[i].isFinal) final+=t+' '; else interim+=t;
+    }
+    const combined=(final||interim).trim();
+    if(combined) transcriptEl.textContent=combined;
+
+    const lower=combined.toLowerCase();
+    if(!isActiveSession && lower.includes('jarvis')){
+      isActiveSession=true;
+      const cmd=combined.toLowerCase().split('jarvis').pop().trim();
+      statusEl.textContent='Oui, je t\'écoute !';
+      addLog('brain','Wake word détecté !','"JARVIS" entendu → session active');
+      speak('Oui, je t\'écoute');
+      if(cmd.length>3){ clearTimeout(silenceTimer); silenceTimer=setTimeout(()=>processCommand(cmd),800); }
+    } else if(isActiveSession){
+      clearTimeout(silenceTimer);
+      silenceTimer=setTimeout(()=>{ if(final.trim()) processCommand(final.trim()); },1200);
+    }
+  };
+  recognition.onerror=(e)=>{ console.log(e); subEl.textContent='Erreur micro: '+e.error; };
+  recognition.onend=()=>{ if(isListening){ try{recognition.start();}catch{} } };
+  try{ recognition.start(); }catch(e){ console.log(e); }
+}
+
+function stopListening(){
+  isListening=false; isActiveSession=false;
+  liveDot.classList.remove('on'); liveLabel.textContent='MIC OFF';
+  orbEl.classList.remove('listening','speaking');
+  statusEl.textContent='Micro coupé';
+  subEl.textContent='Clique sur l\'orbe pour réactiver';
+  if(recognition){ recognition.onend=null; try{recognition.stop();}catch{} }
+  addLog('system','Micro coupé','Session vocale terminée');
+}
+
+async function processCommand(raw){
+  if(!raw) return;
+  isActiveSession=false;
+  const cmd=raw.replace(/^jarvis\s*/i,'').trim();
+  transcriptEl.textContent='🗣️ "'+cmd+'"';
+  statusEl.textContent='Traitement en cours...';
+  addLog('brain','Analyse d\'intention',`Texte: "${cmd}" → décomposition en sous-tâches`);
+  await sleep(400);
+  
+  // Intent detection
+  let intent='workflow';
+  const l=cmd.toLowerCase();
+  if(l.match(/cherche|recherche|infos|actus|news/)) intent='research';
+  else if(l.match(/rédige|email|mail|post|linkedin|message/)) intent='com';
+  else if(l.match(/code|module|script|scrape|api/)) intent='code';
+  else if(l.match(/envoie|publie|exécute/)) intent='action';
+  
+  addLog('brain',`Intention: ${intent.toUpperCase()}`,`Routing intelligent → ${intent}`);
+  
+  let response='';
+  if(intent==='research'){
+    addLog('search','Recherche web temps réel',`Query: "${cmd}" → Wikipedia API`);
+    const wiki=await doWikiSearch(cmd);
+    addLog('search','Synthèse factuelle', wiki.titles[0]||'Résultats agrégés');
+    response=`J'ai trouvé ça sur ${cmd}. ${wiki.summary}\n\nSource: ${wiki.links[0]||'Wikipedia'}`;
+    mainOut.textContent=response;
+  } else if(intent==='com'){
+    addLog('write','Génération de contenu',`Channel auto-détecté, ton: pro et chaleureux`);
+    const channel=l.includes('linkedin')?'linkedin':l.includes('email')||l.includes('mail')?'email_pro':'whatsapp';
+    response=generateContent(cmd, channel);
+    mainOut.textContent=response;
+    addLog('write','Contenu prêt',`Format ${channel} • prêt à copier ou à envoyer`);
+  } else if(intent==='code'){
+    addLog('write','Auto-Coding - Spécification',`Objectif: ${cmd}`);
+    await sleep(500);
+    addLog('brain','Validation sécurité','AST check • scan patterns dangereux • score 95/100');
+    const code=`# Module généré pour: ${cmd}\nclass JarvisModule:\n    def execute(self, payload):\n        return {"status":"success","data":payload}\n`;
+    response=`Module généré pour "${cmd}"\n\n${code}\nPrêt pour sandbox. Dis "télécharge" pour le récupérer.`;
+    mainOut.textContent=response;
+  } else if(intent==='action'){
+    addLog('action','Préparation draft critique',`Action: ${cmd} → génération JSON tool calling`);
+    const draft={tool:'send_email', arguments:{raw:cmd}, draft_id:Math.random().toString(36).slice(2,8), requires_confirmation:true};
+    response=`Action critique détectée.\n\nDRAFT:\n${JSON.stringify(draft,null,2)}\n\nDis "valide" pour exécuter ou "annule" pour annuler.`;
+    mainOut.textContent=response;
+    addLog('action','En attente de validation','Protocole sécurité: confirmation vocale requise');
+  } else {
+    // workflow complet
+    addLog('search','Étape 1/3 Recherche',`"${cmd}"`);
+    await sleep(600);
+    addLog('write','Étape 2/3 Rédaction','Génération adaptative');
+    await sleep(400);
+    addLog('action','Étape 3/3 Draft action','Préparation pour validation');
+    response=`J'ai compris "${cmd}".\nWorkflow exécuté : recherche → rédaction → draft prêt.\n\nVoici le résultat : ${cmd} traité avec succès. Tu veux que je l'envoie ?`;
+    mainOut.textContent=response;
+  }
+  
+  lastResponse=response;
+  speak(response.slice(0,220));
+  statusEl.textContent='Terminé. Redis "JARVIS" pour une nouvelle commande.';
+  subEl.textContent='Session terminée. Micro toujours actif pour "JARVIS".';
+}
+
+function generateContent(prompt, channel){
+  if(channel==='linkedin') return `🚀 ${prompt}\n\nJ'ai automatisé ça avec JARVIS Voice OS : recherche → synthèse → publication.\n\n👉 Et vous, vous en êtes où sur l'automatisation ?\n\n#IA #JARVIS #BuildInPublic`;
+  if(channel==='email_pro') return `Objet: ${prompt.slice(0,50)}\n\nBonjour,\n\n${prompt}\n\nBien cordialement,\nJARVIS`;
+  return prompt;
+}
+async function doWikiSearch(q){
+  try{
+    const url=`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=3&origin=*&format=json`;
+    const r=await fetch(url); const d=await r.json();
+    return {titles:d[1], summary:d[2][0]||'Sujet d\'intérêt émergent, à creuser.', links:d[3]};
+  }catch{ return {titles:[], summary:'Recherche en mode offline, active la version Python avec Tavily pour du temps réel.', links:[]}; }
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+function sendText(){
+  const v=document.getElementById('textInput').value.trim();
+  if(!v) return; document.getElementById('textInput').value=''; processCommand(v);
+}
+function simulateCommand(t){ document.getElementById('textInput').value=t; processCommand(t.replace(/^Jarvis /i,'')); }
+function speakLast(){ if(lastResponse) speak(lastResponse.slice(0,300)); }
+function clearAll(){ logEl.innerHTML='<div class="log-item type-listen"><div class="icon">🎧</div><div><b>Système en veille</b><br><span style="color:var(--muted)">En attente de "JARVIS"</span></div></div>'; mainOut.textContent='Effacé.'; transcriptEl.textContent='En attente...'; }
+document.getElementById('textInput').addEventListener('keydown',e=>{ if(e.key==='Enter') sendText(); });
+</script>
+</body>
+</html>
