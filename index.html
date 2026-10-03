@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS PRO FINAL - Réglages Email Sans Code</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07070c;--card:#11111a;--card2:#171725;--border:#25253e;--accent:#7c5cff;--accent2:#00e5ff;--text:#ececff;--muted:#8b8ba8;--green:#00ff9d;--yellow:#ffcc33;--red:#ff4a6a}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif}
+.mono{font-family:'JetBrains Mono',monospace}
+header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:rgba(7,7,12,0.92);backdrop-filter:blur(14px);z-index:20}
+.logo{display:flex;gap:10px;align-items:center}
+.logo-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;color:#000;font-weight:800}
+.badge{font-size:10px;padding:5px 10px;border-radius:20px;background:var(--card2);border:1px solid var(--border)}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:6px}
+.live-dot.on{background:var(--red);box-shadow:0 0 10px var(--red);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.hero{display:grid;place-items:center;padding:22px 18px 8px;text-align:center}
+.orb-wrap{position:relative;width:150px;height:150px;display:grid;place-items:center}
+.orb{width:96px;height:96px;border-radius:50%;background:radial-gradient(circle at 35% 35%, var(--accent2), var(--accent));box-shadow:0 0 50px rgba(124,92,255,0.5);cursor:pointer;display:grid;place-items:center;font-size:26px;transition:0.3s}
+.orb.listening{transform:scale(1.12);box-shadow:0 0 80px rgba(124,92,255,0.8)}
+.orb.speaking{animation:speak 0.25s infinite alternate}
+@keyframes speak{0%{transform:scale(1.08)}100%{transform:scale(1.16)}}
+.status{font-weight:800;font-size:16px;margin-top:10px;min-height:22px}
+.sub{font-size:11px;color:var(--muted);min-height:14px;margin-top:4px}
+.transcript{margin-top:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;min-width:300px;max-width:640px;width:90%;font-size:12px;min-height:38px}
+.layout{max-width:1240px;margin:0 auto;padding:14px 18px;display:grid;grid-template-columns:340px 1fr;gap:14px}
+@media(max-width:950px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:14px}
+.card h3{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+.input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:12px;outline:none;margin-top:6px}
+.input:focus{border-color:var(--accent)}
+.row{display:flex;gap:8px;margin-top:10px}
+.btn{padding:9px 13px;border-radius:10px;border:none;cursor:pointer;font-weight:700;font-size:11px;display:inline-flex;gap:6px;align-items:center}
+.btn-p{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#000}
+.btn-g{background:var(--card2);border:1px solid var(--border);color:var(--text)}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.output{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px;white-space:pre-wrap;font-family:'JetBrains Mono';font-size:11.5px;line-height:1.6;min-height:80px;margin-top:10px}
+.log{display:flex;flex-direction:column;gap:7px;max-height:380px;overflow:auto}
+.log-item{display:flex;gap:9px;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid var(--border);font-size:11px}
+.log-item .ic{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;flex-shrink:0}
+.t-ok .ic{background:rgba(0,255,157,0.15);color:var(--green)}
+.t-action .ic{background:rgba(255,204,51,0.15);color:var(--yellow)}
+.t-brain .ic{background:rgba(124,92,255,0.15);color:var(--accent)}
+.help{padding:10px 12px;background:linear-gradient(135deg,rgba(124,92,255,0.08),rgba(0,229,255,0.06));border:1px solid rgba(124,92,255,0.18);border-radius:10px;font-size:11px;line-height:1.6;color:var(--muted);margin-top:10px}
+.help b{color:var(--text)}
+.kbd{padding:2px 5px;background:var(--card2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;font-size:10px}
+.config-status{padding:8px 10px;border-radius:8px;font-size:11px;margin-top:8px;display:flex;gap:8px;align-items:center}
+.config-status.ok{background:rgba(0,255,157,0.1);border:1px solid rgba(0,255,157,0.25);color:var(--green)}
+.config-status.no{background:rgba(255,74,106,0.1);border:1px solid rgba(255,74,106,0.25);color:var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><div class="logo-icon">J</div><div><div style="font-weight:800;font-size:13px">JARVIS PRO FINAL</div><div class="mono" style="font-size:9px;color:var(--muted)">NIVEAU 2 & 3 - RÉGLAGES SANS CODE</div></div></div>
+  <div style="display:flex;gap:8px"><div class="badge mono"><span id="liveDot" class="live-dot"></span><span id="liveLabel">MIC OFF</span></div><div class="badge mono" id="emailStatus">EMAIL: NON CONFIG</div></div>
+</header>
+
+<div class="hero">
+  <div class="orb-wrap"><div id="orb" class="orb" onclick="toggleVoice()">🎙️</div></div>
+  <div id="status" class="status">Clique pour activer</div>
+  <div id="sub" class="sub">Dis "JARVIS envoie un email à..." - Config en bas à gauche, pas besoin de code</div>
+  <div id="transcript" class="transcript mono">En attente...</div>
+</div>
+
+<div class="layout">
+  <!-- COLONNE GAUCHE : RÉGLAGES -->
+  <div>
+    <div class="card" style="border-color:var(--accent);box-shadow:0 0 30px rgba(124,92,255,0.12)">
+      <h3>📧 Niveau 2 - Envoi réel sans serveur <span class="mono" style="color:var(--green)">GRATUIT</span></h3>
+      <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:10px">
+        <b style="color:var(--text)">Tu n'as pas besoin de toucher au code.</b> Tout se règle ici, c'est stocké dans ton navigateur.<br><br>
+        <b>Comment obtenir tes clés EmailJS (2 min) :</b><br>
+        1. Va sur <b style="color:var(--text)">emailjs.com</b> > Sign Up gratuit<br>
+        2. <b>Add New Service</b> > Gmail > Connecte ton Gmail > Copie <span class="kbd">Service ID</span><br>
+        3. <b>Email Templates</b> > Create New Template > Mets ce contenu :<br>
+        <div style="background:var(--bg);border:1px dashed var(--border);padding:8px;border-radius:8px;margin:6px 0" class="mono">To: {{to_email}}<br>Subject: {{subject}}<br>Message: {{message}}<br>From: JARVIS</div>
+        4. Save > Copie <span class="kbd">Template ID</span><br>
+        5. Account > API Keys > Copie <span class="kbd">Public Key</span>
+      </div>
+      <div>
+        <label class="mono" style="font-size:10px">SERVICE ID</label><input id="ejS" class="input" placeholder="service_xxxxxxx">
+        <label class="mono" style="font-size:10px">TEMPLATE ID</label><input id="ejT" class="input" placeholder="template_xxxxxxx">
+        <label class="mono" style="font-size:10px">PUBLIC KEY</label><input id="ejK" class="input" placeholder="xxxxxxxxxxxxxxxx">
+        <div class="row"><button class="btn btn-p" onclick="saveEJ()">💾 Sauvegarder</button><button class="btn btn-g" onclick="testEJ()">🧪 Tester envoi réel</button><button class="btn btn-g" onclick="clearEJ()">🗑️ Effacer</button></div>
+        <div id="ejStatus" class="config-status no">❌ Non configuré - envoi via ouverture de ton app mail (mailto)</div>
+      </div>
+      <div class="help"><b>Une fois configuré :</b> Tu dis "Jarvis envoie un email à test@gmail.com pour dire bonjour" > Je génère le draft > Tu dis "oui envoie" > <b>Ça part vraiment</b> via EmailJS, sans ouvrir Gmail. Limite gratuite : 200 mails/mois.</div>
+    </div>
+
+    <div class="card" style="border-color:var(--yellow)">
+      <h3>🚀 Niveau 3 - Backend perso illimité <span class="mono" style="color:var(--yellow)">PRO</span></h3>
+      <div style="font-size:11px;line-height:1.7;color:var(--muted)">
+        <b style="color:var(--text)">C'est quoi ?</b><br>
+        Au lieu de passer par EmailJS, ton site GitHub Pages appelle <b>ton propre serveur</b> qui envoie le mail via Gmail SMTP. Illimité, gratuit, tu contrôles tout.<br><br>
+        <b style="color:var(--text)">Architecture :</b><br>
+        <span class="mono">GitHub Pages (ton index.html)<br>↓ fetch POST<br>Ton API sur Render.com (email_api.py)<br>↓ SMTP<br>Gmail → destinataire</span><br><br>
+        <b style="color:var(--text)">Comment le faire (10 min) :</b><br>
+        1. Va sur <span class="kbd">myaccount.google.com/apppasswords</span> > crée mot de passe d'app "JARVIS" > copie les 16 lettres<br>
+        2. Télécharge ces fichiers :<br>
+        • <a href="#" onclick="alert('Fichiers déjà générés : real_email.py + email_api.py dans /mnt/data/jarvis/')" style="color:var(--accent2)">real_email.py + email_api.py</a><br>
+        3. Crée repo GitHub `jarvis-email-api` avec ces 2 fichiers + `requirements.txt` (fastapi uvicorn python-dotenv)<br>
+        4. Va sur <span class="kbd">render.com</span> > New Web Service > connecte ton repo > Build: <span class="kbd">pip install -r requirements.txt</span> Start: <span class="kbd">uvicorn email_api:app --host 0.0.0.0 --port 10000</span><br>
+        5. Dans Environment > ajoute <span class="kbd">SMTP_USER</span>=ton gmail et <span class="kbd">SMTP_PASS</span>=ton mdp d'app<br>
+        6. Une fois déployé, tu as une URL genre <span class="kbd">https://jarvis-email-api.onrender.com</span> → colle-la ci-dessous<br><br>
+      </div>
+      <label class="mono" style="font-size:10px">URL DE TON API PERSO (Niveau 3)</label><input id="customApi" class="input" placeholder="https://ton-api.onrender.com/send-email">
+      <div class="row"><button class="btn btn-p" onclick="saveApi()">💾 Sauvegarder API</button><button class="btn btn-g" onclick="clearApi()">Effacer</button></div>
+      <div id="apiStatus" class="config-status no">❌ Pas d'API perso - utilise Niveau 2 ou mailto</div>
+      <div class="help"><b>Priorité d'envoi :</b> Si API perso renseignée → j'utilise Niveau 3. Sinon si EmailJS configuré → Niveau 2. Sinon → mailto (ouvre ton app mail). Tu n'as jamais besoin de toucher au code, juste ces champs.</div>
+    </div>
+
+    <div class="card"><h3>📡 Journal discret</h3><div id="log" class="log"></div></div>
+  </div>
+
+  <!-- COLONNE DROITE : CONVERSATION -->
+  <div>
+    <div class="card">
+      <h3>💬 Dis "JARVIS..."</h3>
+      <div style="display:flex;gap:8px"><input id="txt" class="input" placeholder="Ex: envoie un email à contact@test.com pour dire bonjour"><button class="btn btn-p" onclick="sendTxt()">Envoyer</button><button class="btn btn-g" onclick="toggleVoice()">🎙️</button></div>
+      <div id="out" class="output">Prêt. Configure d'abord ton email à gauche si tu veux l'envoi 100% auto, sinon je ferai mailto.</div>
+      <div id="actionZone" style="margin-top:12px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let recog=null, listening=false, active=false, timer=null, lastResp='';
+const logEl=document.getElementById('log'), outEl=document.getElementById('out'), transEl=document.getElementById('transcript'), statusEl=document.getElementById('status'), subEl=document.getElementById('sub'), orbEl=document.getElementById('orb'), liveDot=document.getElementById('liveDot'), liveLabel=document.getElementById('liveLabel');
+
+function log(t,title,detail){const ic={listen:'🎧',brain:'🧠',search:'🔍',write:'✍️',action:'⚡',ok:'✅'}[t]||'•'; const d=document.createElement('div'); d.className=`log-item t-${t}`; d.innerHTML=`<div class="ic">${ic}</div><div><b>${title}</b><br><span style="color:var(--muted)">${detail}</span></div>`; logEl.prepend(d); if(logEl.children.length>30) logEl.lastChild.remove();}
+
+function loadSettings(){
+  const s=localStorage.getItem('ej_s')||'', t=localStorage.getItem('ej_t')||'', k=localStorage.getItem('ej_k')||'', api=localStorage.getItem('custom_api')||'';
+  document.getElementById('ejS').value=s; document.getElementById('ejT').value=t; document.getElementById('ejK').value=k; document.getElementById('customApi').value=api;
+  updateStatus();
+}
+function updateStatus(){
+  const s=localStorage.getItem('ej_s'), t=localStorage.getItem('ej_t'), k=localStorage.getItem('ej_k'), api=localStorage.getItem('custom_api');
+  const ejOk=s&&t&&k; const apiOk=!!api;
+  const ejSt=document.getElementById('ejStatus'), apiSt=document.getElementById('apiStatus'), emailBadge=document.getElementById('emailStatus');
+  if(ejOk){ ejSt.className='config-status ok'; ejSt.textContent='✅ Configuré - envoi réel via EmailJS actif'; } else { ejSt.className='config-status no'; ejSt.textContent='❌ Non configuré - fallback mailto'; }
+  if(apiOk){ apiSt.className='config-status ok'; apiSt.textContent='✅ API perso configurée : '+api.slice(0,40)+'...'; emailBadge.textContent='EMAIL: NIVEAU 3 API'; emailBadge.style.color='var(--yellow)'; }
+  else if(ejOk){ emailBadge.textContent='EMAIL: NIVEAU 2 EmailJS'; emailBadge.style.color='var(--green)'; }
+  else { apiSt.className='config-status no'; apiSt.textContent='❌ Pas d\'API perso'; emailBadge.textContent='EMAIL: MAILTO'; emailBadge.style.color='var(--muted)'; }
+}
+function saveEJ(){ localStorage.setItem('ej_s',document.getElementById('ejS').value.trim()); localStorage.setItem('ej_t',document.getElementById('ejT').value.trim()); localStorage.setItem('ej_k',document.getElementById('ejK').value.trim()); updateStatus(); log('ok','EmailJS sauvegardé','Clés stockées localement',true); alert('✅ EmailJS sauvegardé ! Fais "Tester envoi réel" pour vérifier.'); }
+function clearEJ(){ localStorage.removeItem('ej_s'); localStorage.removeItem('ej_t'); localStorage.removeItem('ej_k'); document.getElementById('ejS').value='';document.getElementById('ejT').value='';document.getElementById('ejK').value=''; updateStatus(); log('ok','EmailJS effacé','Retour mailto'); }
+function saveApi(){ const v=document.getElementById('customApi').value.trim(); if(v) localStorage.setItem('custom_api',v); else localStorage.removeItem('custom_api'); updateStatus(); log('ok','API perso sauvegardée',v); alert('✅ API perso sauvegardée'); }
+function clearApi(){ localStorage.removeItem('custom_api'); document.getElementById('customApi').value=''; updateStatus(); }
+async function testEJ(){
+  const s=localStorage.getItem('ej_s'), t=localStorage.getItem('ej_t'), k=localStorage.getItem('ej_k');
+  if(!s||!t||!k){ alert('Configure d\'abord Service ID, Template ID et Public Key'); return; }
+  const to=prompt('Email de test pour vérifier l\'envoi réel :','ton.email@gmail.com'); if(!to) return;
+  outEl.textContent='🧪 Test envoi réel via EmailJS à '+to+'...';
+  try{
+    const res=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:s, template_id:t, user_id:k, template_params:{to_email:to, subject:'Test JARVIS - Envoi réel OK', message:'Ceci est un test réel depuis JARVIS PRO. Si tu reçois ce mail, le Niveau 2 est opérationnel !'}})});
+    if(res.ok){ outEl.textContent='✅ TEST RÉUSSI ! Email réel envoyé à '+to+'\nVérifie ta boîte (et spams). Tu peux maintenant dire "Jarvis envoie un email..."'; log('ok','Test EmailJS OK','Envoyé à '+to); }
+    else { const txt=await res.text(); outEl.textContent='❌ Erreur EmailJS: '+txt+'\nVérifie tes IDs et que ton template contient bien {{to_email}}, {{subject}}, {{message}}'; }
+  }catch(e){ outEl.textContent='❌ Erreur réseau: '+e; }
+}
+loadSettings();
+
+// Voice + actions (simplified from V2)
+function toggleVoice(){ listening?stopListen():startListen(); }
+function startListen(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){ alert('Chrome/Edge requis'); return; }
+  recog=new SR(); recog.lang='fr-FR'; recog.continuous=true; recog.interimResults=true; listening=true; liveDot.classList.add('on'); liveLabel.textContent='MIC ON'; orbEl.classList.add('listening'); statusEl.textContent='Dis "JARVIS"'; log('brain','Micro ON','En attente wake word');
+  recog.onresult=e=>{ let interim='', final=''; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) final+=t+' '; else interim+=t; } const txt=(final||interim).trim(); if(txt) transEl.textContent=txt; const low=txt.toLowerCase(); if(!active && low.includes('jarvis')){ active=true; const cmd=low.split('jarvis').pop().trim(); statusEl.textContent='Oui !'; if(cmd.length>2){ clearTimeout(timer); timer=setTimeout(()=>{process(cmd); active=false;},700);} } else if(active){ clearTimeout(timer); timer=setTimeout(()=>{ if(final.trim()){process(final.trim()); active=false;}},1000);} };
+  recog.onend=()=>{ if(listening) try{recog.start();}catch{} }; try{recog.start();}catch{}
+}
+function stopListen(){ listening=false; active=false; liveDot.classList.remove('on'); liveLabel.textContent='MIC OFF'; orbEl.classList.remove('listening'); statusEl.textContent='Micro coupé'; if(recog){recog.onend=null; try{recog.stop();}catch{}} }
+
+async function process(raw){
+  const cmd=raw.replace(/^jarvis\s*/i,'').trim(); if(!cmd) return; transEl.textContent='🗣️ "'+cmd+'"'; statusEl.textContent='Traitement...'; log('brain','Commande',cmd);
+  if(cmd.toLowerCase().match(/envoie|envoyer/)){
+    const draft=parseEmail(cmd); showAction(draft); outEl.textContent=`Draft prêt pour ${draft.to}\nObjet: ${draft.subject}\n\nDis "oui envoie" ou clique Valider pour envoyer RÉELLEMENT (via ${localStorage.getItem('custom_api')?'Niveau 3 API':(localStorage.getItem('ej_s')?'Niveau 2 EmailJS':'mailto')})`; 
+  } else if(cmd.toLowerCase().includes('cherche')){ const r=await wiki(cmd); outEl.textContent=r; }
+  else { outEl.textContent=`Reçu "${cmd}". Dis "envoie un email à..." pour tester l'envoi réel.`; }
+  statusEl.textContent='Fait. Redis "JARVIS"';
+}
+function parseEmail(cmd){ const m=cmd.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i); const to=m?m[0]:'test@example.com'; const subj=cmd.replace(to,'').slice(0,60)||'Message JARVIS'; return {to, subject:subj, body:cmd}; }
+function showAction(d){ const z=document.getElementById('actionZone'); z.innerHTML=`<div class="log-item t-action"><div class="ic">⚠️</div><div><b>DRAFT CRITIQUE</b><br>À: ${d.to}<br>Objet: ${d.subject}<br><div style="background:var(--bg);border:1px solid var(--border);padding:8px;border-radius:8px;margin-top:6px" class="mono">${d.body.slice(0,200)}</div></div></div><div class="row"><button class="btn btn-p" onclick="executeReal()">✅ Valider et envoyer RÉEL</button><button class="btn btn-g" onclick="document.getElementById('actionZone').innerHTML=''">❌ Annuler</button></div>`; window._draft=d; }
+async function executeReal(){
+  const d=window._draft; if(!d) return; const api=localStorage.getItem('custom_api'); const s=localStorage.getItem('ej_s'), t=localStorage.getItem('ej_t'), k=localStorage.getItem('ej_k');
+  log('action','Envoi réel demandé','À '+d.to);
+  if(api){
+    try{ const res=await fetch(api,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to:d.to, subject:d.subject, body:d.body})}); const j=await res.json(); if(j.status==='success'){ outEl.textContent='✅ Email VRAIMENT envoyé via ton API perso (Niveau 3) à '+d.to; log('ok','Envoyé Niveau 3','API perso'); } else { outEl.textContent='❌ Erreur API: '+JSON.stringify(j); } }catch(e){ outEl.textContent='❌ Erreur API perso: '+e; }
+  } else if(s&&t&&k){
+    try{ const res=await fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:s, template_id:t, user_id:k, template_params:{to_email:d.to, subject:d.subject, message:d.body}})}); if(res.ok){ outEl.textContent='✅ Email VRAIMENT envoyé via EmailJS (Niveau 2) à '+d.to+'\nVérifie boîte.'; log('ok','Envoyé Niveau 2','EmailJS'); } else { outEl.textContent='❌ Erreur EmailJS: '+await res.text(); } }catch(e){ outEl.textContent='❌ Erreur: '+e; }
+  } else {
+    window.location.href=`mailto:${d.to}?subject=${encodeURIComponent(d.subject)}&body=${encodeURIComponent(d.body)}`; outEl.textContent='📧 J\'ouvre ton app mail (mailto) pour '+d.to+' - Configure Niveau 2 ou 3 pour envoi 100% auto.'; log('ok','Mailto ouvert','Action réelle côté client');
+  }
+}
+async function wiki(q){ try{ const url=`https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(q)}&limit=3&origin=*&format=json`; const r=await fetch(url); const d=await r.json(); return `Trouvé: ${d[1][0]||q} - ${d[2][0]||''}`; }catch{ return 'Recherche offline'; } }
+function sendTxt(){ const v=document.getElementById('txt').value.trim(); if(!v) return; document.getElementById('txt').value=''; process(v); }
+document.getElementById('txt').addEventListener('keydown',e=>{if(e.key==='Enter') sendTxt();});
+log('ok','JARVIS PRO FINAL prêt','Configure email à gauche pour envoi réel sans code');
+</script>
+</body>
+</html>
