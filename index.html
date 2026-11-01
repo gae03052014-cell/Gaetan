@@ -40,7 +40,7 @@
     if (!remote) { var mb = document.getElementById("mode"); mb.style.display = "block"; setTimeout(function () { mb.style.display = "none"; }, 6000); }
     var base = remote ? CFG.firebaseUrl.replace(/\/$/, "") + "/s/" : "";
     function url(key) { return base + encodeURIComponent(key) + ".json"; }
-    Firebase REST = {
+    window.storage = {
       get: async function (key, shared) {
         if (shared && remote) {
           var r = await fetch(url(key));
