@@ -162,44 +162,6 @@ Error generating stack: `+e.message+`
 
     <!-- Script pour gérer les notifications -->
 </script>
-      function declencherNotificationSansTrace() {
-        // 1. Vérifier si le navigateur supporte les notifications
-        if (!('Notification' in window)) {
-          alert("Votre navigateur ne supporte pas les notifications.");
-          return;
-        }
-
-        // 2. Demander la permission à l'utilisateur
-        Notification.requestPermission().then((permission) => {
-          if (permission === 'granted') {
-            // 3. Si accepté, afficher la notification via le Service Worker
-            navigator.serviceWorker.ready.then((registration) => {
-              registration.showNotification("Sans Trace 🔒", {
-                body: "Nouveau message chiffré reçu sans laisser de trace.",
-                icon: "icon.png",
-                vibrate: [200, 100, 200],
-                badge: "icon.png"
-              });
-            });
-          } else {
-            alert("Vous devez autoriser les notifications pour les recevoir.");
-          }
-        });
-      }
-
-      // Enregistrement automatique du Service Worker
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./service-worker.js')
-            .then((reg) => {
-              console.log('Service Worker enregistré avec succès :', reg.scope);
-            })
-            .catch((err) => {
-              console.log('Erreur lors de l’enregistrement du Service Worker :', err);
-            });
-        });
-      }
-    </script>
 
   </body>
 </html>
