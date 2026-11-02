@@ -219,10 +219,13 @@ react-dom/cjs/react-dom-client.production.js:
    *)
 */
 
-  <button onclick="declencherNotificationSansTrace()" style="padding: 10px 20px; background-color: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer;">
-  Tester la notification
-</button>
-    
+  <!-- Bouton de test des notifications -->
+  <button 
+    onclick="declencherNotificationSansTrace()" 
+    style="padding: 12px 24px; background-color: #2563eb; color: white; font-weight: bold; border: none; border-radius: 8px; cursor: pointer;">
+    Tester la notification
+  </button>
+
   <script>
     // Enregistrement du Service Worker au chargement
     if ('serviceWorker' in navigator) {
@@ -266,3 +269,4 @@ react-dom/cjs/react-dom-client.production.js:
   </script>
 </body>
 </html>
+
