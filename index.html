@@ -219,46 +219,6 @@ react-dom/cjs/react-dom-client.production.js:
    *)
 */
 
-  <script>
-    // Enregistrement du Service Worker au chargement
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js')
-          .then((reg) => console.log('Service Worker enregistré sur :', reg.scope))
-          .catch((err) => console.error('Erreur Service Worker :', err));
-      });
-    }
-
-    // Fonction d'envoi de notification
-    function declencherNotificationSansTrace() {
-      if (!('Notification' in window)) {
-        alert("Votre navigateur ne prend pas en charge les notifications.");
-        return;
-      }
-
-      Notification.requestPermission().then((permission) => {
-        if (permission === 'granted') {
-          const titre = "Sans Trace 🔒";
-          const options = {
-            body: "Nouveau message chiffré reçu sans laisser de trace.",
-            icon: "icon.png",
-            vibrate: [200, 100, 200]
-          };
-
-          // Affichage via le Service Worker s'il est prêt
-          if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.ready.then((registration) => {
-              registration.showNotification(titre, options);
-            });
-          } else {
-            // Alternative directe si le Service Worker n'est pas actif de suite
-            new Notification(titre, options);
-          }
-        } else {
-          alert("Vous avez refusé les notifications. Veuillez modifier l'autorisation dans les paramètres de votre navigateur.");
-        }
-      });
-    }
   </script>
 </body>
 </html>
