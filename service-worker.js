@@ -1,54 +1,45 @@
-const CACHE_NAME = 'sans-trace-v1';
-const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html'
-];
+// service-worker.js
 
-// Installation du Service Worker et mise en cache des fichiers essentiels
+const CACHE_NAME = 'sans-trace-v1';
+
+// Installation du Service Worker
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
   self.skipWaiting();
 });
 
-// Activation et nettoyage des anciens caches
+// Activation et prise de contrôle immédiate
 self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+// Gestion des notifications reçues via un serveur push (si applicable)
+self.addEventListener('push', (event) => {
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || "Sans Trace 🔒";
+  const options = {
+    body: data.body || "Nouveau message chiffré reçu sans laisser de trace.",
+    icon: "icon.png",
+    badge: "icon.png",
+    vibrate: [200, 100, 200]
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Action lorsque l'utilisateur clique sur la notification
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Si l'application est déjà ouverte, on la met au premier plan
+      for (const client of clientList) {
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      // Sinon, on ouvre une nouvelle fenêtre
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
     })
   );
-  self.clients.claim();
 });
-
-// Interception des requêtes réseau (Stratégie Network falling back to cache)
-self.addEventListener('fetch', (event) => {
-  // On évite de mettre en cache les requêtes non-GET ou externes (comme Firebase)
-  if (event.request.method !== 'GET') return;
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Si la requête réseau réussit, on met à jour le cache dynamiquement
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
-        return response;
-      })
-      .catch(() => {
-        // Si le réseau échoue (ex: hors-ligne), on récupère depuis le cache
-        return caches.match(event.request);
-      })
-  );
-});
-            
