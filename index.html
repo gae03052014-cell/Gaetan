@@ -216,9 +216,41 @@ react-dom/cjs/react-dom-client.production.js:
    * LICENSE file in the root directory of this source tree.
    *)
 */
-<button onclick="declencherNotificationSansTrace()" style="padding: 10px 20px; background-color: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer;">
-  Tester la notification
-  </button>
-  </script>
-</body>
-</html>
+<!-- Bouton flottant de test de notification -->
+<button 
+  onclick="declencherNotificationSansTrace()" 
+  style="position: fixed; bottom: 20px; right: 20px; z-index: 99999; padding: 12px 20px; background-color: #2563eb; color: white; border: none; border-radius: 50px; font-weight: bold; box-shadow: 0 4px 15px rgba(0,0,0,0.4); cursor: pointer; display: flex; align-items: center; gap: 8px;">
+  <span>🔔</span> Tester Notif
+</button>
+
+<script>
+  // Fonction d'envoi de notification liée au bouton
+  function declencherNotificationSansTrace() {
+    if (!('Notification' in window)) {
+      alert("Votre navigateur ne prend pas en charge les notifications.");
+      return;
+    }
+
+    Notification.requestPermission().then((permission) => {
+      if (permission === 'granted') {
+        const titre = "Sans Trace 🔒";
+        const options = {
+          body: "Nouveau message chiffré reçu sans laisser de trace.",
+          icon: "icon.png",
+          vibrate: [200, 100, 200]
+        };
+
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(titre, options);
+          });
+        } else {
+          new Notification(titre, options);
+        }
+      } else {
+        alert("Permission refusée. Vérifiez les paramètres de votre navigateur.");
+      }
+    });
+  }
+</script>
+  
