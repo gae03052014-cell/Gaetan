@@ -1,0 +1,7 @@
+{
+  "name": "sans-trace-push",
+  "main": "worker.js",
+  "compatibility_date": "2025-01-01",
+  "keep_vars": true,
+  "ai": { "binding": "AI" }
+}
