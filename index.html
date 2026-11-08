@@ -5513,7 +5513,62 @@ function App() {
             React.createElement(Chat, { key: openWith.id, me: me, other: openWith, prefs: prefs, onPrefs: updatePrefs, onBack: () => setScreen("home"), onCall: (kind) => setCallReq({ other: openWith, kind: kind, n: Date.now() }) }))));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
+<!-- Votre espace administrateur -->
+<div id="admin-panel" class="dashboard">
+    <h2>Tableau de bord Admin</h2>
+    <p>Bienvenue dans l'espace de gestion.</p>
 
+    <!-- Le bouton principal -->
+    <button type="button" id="monBoutonAdmin" class="admin-btn">Afficher les contacts</button>
+
+    <!-- Conteneur des contacts (initialement caché) -->
+    <div id="contact-section" style="display: none; margin-top: 15px;">
+        <label for="contactSelect"><strong>Sélectionnez un contact :</strong></label><br>
+        <select id="contactSelect" style="margin-top: 5px; padding: 8px; width: 100%; border-radius: 4px;">
+            <option value="">-- Choisissez un contact --</option>
+            <option value="1">Alice Dupont</option>
+            <option value="2">Marc Leroy</option>
+            <option value="3">Sophie Martin</option>
+        </select>
+        <br>
+        <button type="button" id="validerSelection" class="admin-btn" style="margin-top: 10px; background-color: #10b981;">Valider la sélection</button>
+    </div>
+
+    <!-- Zone réservée pour la suite -->
+    <div id="suite-traitement" style="display: none; margin-top: 15px;">
+        <!-- C'est ici que tu pourras écrire la suite -->
+    </div>
+</div>
+
+<script>
+    // 1. Quand on clique sur le bouton admin, on affiche la liste des contacts
+    document.getElementById('monBoutonAdmin').addEventListener('click', function() {
+        const section = document.getElementById('contact-section');
+        section.style.display = 'block'; // Affiche la section des contacts
+    });
+
+    // 2. Quand on valide le contact sélectionné
+    document.getElementById('validerSelection').addEventListener('click', function() {
+        const selectBox = document.getElementById('contactSelect');
+        const contactId = selectBox.value;
+        const contactNom = selectBox.options[selectBox.selectedIndex].text;
+
+        if (contactId === "") {
+            alert("Veuillez sélectionner un contact dans la liste.");
+            return;
+        }
+
+        // On récupère le contact choisi
+        console.log("Contact sélectionné ID:", contactId, "Nom:", contactNom);
+
+        // Afficher la zone pour la suite
+        const zoneSuite = document.getElementById('suite-traitement');
+        zoneSuite.style.display = 'block';
+        zoneSuite.innerHTML = `<p style="color: green;"><strong>Contact sélectionné :</strong> ${contactNom}</p>`;
+
+        // === C'EST ICI QUE TU POURRAS ÉCRIRE LA SUITE ===
+    });
+</script>
 </script>
 </body>
 </html>
