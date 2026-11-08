@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="google-site-verification" content="XNf0E4OECGg4wW-7sRiwQvaHW5B2fdJxLtAotmN_ykM" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sans-Trace — Discute sans laisser de trace</title>
+<meta name="description" content="Sans-Trace : messagerie pseudonyme sans numéro ni e-mail. Discussions privées chiffrées de bout en bout, appels audio et vidéo, messages éphémères. S'installe depuis le navigateur.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Sans-Trace — Discute sans laisser de trace">
+<meta property="og:description" content="Messagerie pseudonyme : pas de numéro, pas d'e-mail. Installe-la en 30 secondes depuis ton navigateur.">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary">
+<link rel="canonical" href="https://gae03052014-cell.github.io/sans-trace/">
+<meta name="keywords" content="messagerie pseudonyme, messagerie sans numéro de téléphone, messagerie sans e-mail, chat chiffré de bout en bout, appel vidéo en groupe, messages éphémères, application web installable, Sans-Trace">
+<meta property="og:url" content="https://gae03052014-cell.github.io/sans-trace/">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Sans-Trace","applicationCategory":"CommunicationApplication","operatingSystem":"Android, iOS, Windows, macOS, Linux (navigateur)","inLanguage":"fr","url":"https://gae03052014-cell.github.io/Gaetan/","description":"Messagerie pseudonyme sans numéro ni e-mail, avec discussions privées chiffrées de bout en bout, appels audio et vidéo, messages éphémères et programmés."}</script>
+<meta name="theme-color" content="#0A1020"><meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='26' fill='%232DD4BF'/%3E%3Cpath d='M25 30h50v32H48L33 76V62H25z' fill='%230F1115'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0F1115;--bg2:#171a21;--card:rgba(255,255,255,.05);--bd:rgba(255,255,255,.1);--tx:#eef2f6;--mut:#a3adba;--ac:#2DD4BF;--ac2:#3B82F6;--grad:linear-gradient(135deg,#2DD4BF,#3B82F6);--btn:#04201c}
+:root[data-theme=light]{--bg:#f5f8fb;--bg2:#fff;--card:rgba(255,255,255,.8);--bd:rgba(15,17,21,.12);--tx:#10151c;--mut:#4b5766;--ac:#0d9488;--btn:#fff}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--tx);line-height:1.6;overflow-x:hidden}
+a{color:var(--ac)}
+:focus-visible{outline:3px solid var(--ac2);outline-offset:3px;border-radius:8px}
+.wrap{max-width:1100px;margin:auto;padding:0 20px}
+section{padding:72px 0}
+h1{font-size:clamp(2.2rem,6vw,3.8rem);line-height:1.1;font-weight:800}
+h2{font-size:clamp(1.6rem,4vw,2.3rem);margin-bottom:12px;font-weight:800}
+.g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--mut);max-width:60ch}
+header{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);background:color-mix(in srgb,var(--bg) 75%,transparent);border-bottom:1px solid var(--bd)}
+nav{display:flex;align-items:center;gap:14px;height:62px}
+.logo{font-weight:800;text-decoration:none;color:var(--tx);display:flex;align-items:center;gap:8px;margin-right:auto}
+.logo i{width:26px;height:26px;border-radius:8px;background:var(--grad);display:block}
+nav a.l{color:var(--mut);text-decoration:none;font-size:.9rem}
+@media(max-width:760px){nav a.l{display:none}}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 24px;border-radius:999px;border:0;font:600 1rem Inter,sans-serif;cursor:pointer;text-decoration:none;background:var(--grad);color:var(--btn);transition:transform .2s}
+.btn:hover{transform:translateY(-2px)}
+.btn.o{background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+.btn.s{padding:9px 18px;font-size:.9rem}
+.ico{width:42px;height:42px;padding:0;justify-content:center;background:var(--card);color:var(--tx);border:1px solid var(--bd)}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;padding-top:56px}
+.hero p{margin:18px 0 26px;font-size:1.1rem}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.note{font-size:.85rem;color:var(--mut);margin-top:14px}
+@media(max-width:860px){.hero{grid-template-columns:1fr;text-align:center}.cta{justify-content:center}.sub{margin-inline:auto}}
+.phone{width:262px;height:520px;margin:auto;border-radius:38px;border:8px solid #252a33;background:var(--bg);position:relative;box-shadow:0 30px 70px rgba(45,212,191,.2);overflow:hidden;color:#eef2f6;--bg:#0F1115}
+.phone:before{content:"";position:absolute;top:8px;left:50%;width:70px;height:16px;margin-left:-35px;background:#000;border-radius:10px;z-index:3}
+.top{padding:34px 14px 10px;background:rgba(255,255,255,.06);backdrop-filter:blur(10px);display:flex;gap:10px;align-items:center;font-weight:600;font-size:.85rem}
+.av{width:30px;height:30px;border-radius:50%;background:var(--grad);flex:none}
+.chat{display:flex;flex-direction:column;gap:8px;padding:12px;height:410px;overflow:hidden;justify-content:flex-end}
+.b{max-width:80%;padding:8px 12px;border-radius:18px;font-size:.78rem;line-height:1.35;animation:pop .35s both;position:relative}
+.b.in{background:#232832;border-bottom-left-radius:5px}
+.b.out{background:var(--grad);color:#04201c;align-self:flex-end;border-bottom-right-radius:5px}
+.b .h{position:absolute;right:-6px;bottom:-10px;font-size:.9rem;animation:pop .4s both}
+.typ{display:flex;gap:4px;padding:10px 14px;background:#232832;border-radius:18px;width:54px}
+.typ s{width:6px;height:6px;border-radius:50%;background:#7b8696;animation:bl 1s infinite}.typ s:nth-child(2){animation-delay:.2s}.typ s:nth-child(3){animation-delay:.4s}
+@keyframes bl{50%{opacity:.25}}@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.96)}}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:30px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:22px;backdrop-filter:blur(8px)}
+.card b{display:block;margin:8px 0 4px}
+.card p{color:var(--mut);font-size:.93rem}
+.card .e{font-size:1.6rem}
+.rv{opacity:0;transform:translateY(26px);transition:.7s}.rv.on{opacity:1;transform:none}
+.mid{text-align:center;background:var(--bg2)}
+.tabs{display:flex;gap:8px;margin:24px 0;flex-wrap:wrap}
+.tab{padding:10px 20px;border-radius:999px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font:600 .95rem Inter,sans-serif;cursor:pointer}
+.tab[aria-selected=true]{background:var(--grad);color:var(--btn);border-color:transparent}
+.inst{display:grid;grid-template-columns:1fr 280px;gap:30px;align-items:center}
+@media(max-width:800px){.inst{grid-template-columns:1fr}}
+ol.st{list-style:none;padding:0;display:grid;gap:10px;counter-reset:s}
+ol.st li{counter-increment:s;display:flex;gap:12px;padding:12px 14px;border-radius:14px;border:1px solid var(--bd);background:var(--card);transition:.3s}
+ol.st li:before{content:counter(s);flex:none;width:28px;height:28px;border-radius:50%;background:var(--grad);color:var(--btn);display:grid;place-items:center;font-weight:800;font-size:.85rem}
+ol.st li.on{border-color:var(--ac);box-shadow:0 0 0 2px color-mix(in srgb,var(--ac) 30%,transparent)}
+.scr{height:100%;padding:34px 14px 14px;position:relative}
+.scr .url{background:#232832;border-radius:12px;padding:8px 12px;font-size:.7rem;margin-bottom:14px}
+.menu{position:absolute;right:12px;top:78px;background:#232832;border-radius:12px;padding:10px 14px;font-size:.72rem;display:grid;gap:10px;opacity:0;transform:scale(.8);transform-origin:top right;transition:.3s}
+.menu.on{opacity:1;transform:none}
+.menu span.hl{color:#2DD4BF;font-weight:700}
+.home{position:absolute;inset:auto 14px 20px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.home i{aspect-ratio:1;border-radius:14px;background:#232832}
+.home i.n{background:var(--grad);transform:scale(0);transition:.4s}.home i.n.on{transform:scale(1)}
+.fing{position:absolute;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.55);border:2px solid #fff;transition:all .6s;z-index:4;pointer-events:none}
+.mac{width:100%;max-width:520px;margin:30px auto 0;border-radius:14px;border:6px solid #252a33;background:var(--bg);overflow:hidden;color:#eef2f6;--bg:#0F1115}
+.mac .bar{background:#1d2129;padding:8px 12px;display:flex;gap:6px;align-items:center}
+.mac .bar i{width:9px;height:9px;border-radius:50%;background:#ff5f57}.mac .bar i+i{background:#febc2e}.mac .bar i+i+i{background:#28c840}
+.mac .bar span{margin-left:12px;background:#0F1115;border-radius:8px;padding:3px 12px;font-size:.7rem;flex:1}
+.mac .body{display:grid;grid-template-columns:130px 1fr;height:220px}
+.mac .sd{background:#171a21;padding:12px;display:grid;gap:8px;align-content:start}
+.mac .sd i{height:26px;border-radius:8px;background:#232832;display:block}
+.mac .mn{padding:14px;display:flex;flex-direction:column;gap:8px;justify-content:flex-end}
+.car{position:relative;margin-top:26px}
+.slides{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px}
+.slides>*{flex:none;scroll-snap-align:center}
+.slides .ph{width:200px;height:400px;border-radius:26px;border:2px dashed var(--bd);display:grid;place-items:center;text-align:center;color:var(--mut);font-size:.85rem;padding:14px}
+.slides img{width:200px;border-radius:26px}
+details{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px 20px;margin-top:10px}
+summary{cursor:pointer;font-weight:600}
+details p{color:var(--mut);margin-top:10px}
+form{display:grid;gap:14px;margin-top:24px;max-width:620px}
+label{font-weight:600;font-size:.9rem;display:grid;gap:6px}
+input,select,textarea{font:inherit;padding:12px 14px;border-radius:12px;border:1px solid var(--bd);background:var(--bg2);color:var(--tx);width:100%}
+textarea{min-height:130px;resize:vertical}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+#msg{padding:12px 14px;border-radius:12px;display:none;font-size:.93rem}
+#msg.ok{display:block;background:rgba(45,212,191,.15);border:1px solid var(--ac)}
+#msg.er{display:block;background:rgba(239,68,68,.15);border:1px solid #ef4444}
+.join{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+.join span{padding:8px 16px;border-radius:999px;background:var(--card);border:1px solid var(--bd);font-size:.9rem}
+footer{border-top:1px solid var(--bd);padding:36px 0;text-align:center;color:var(--mut);font-size:.9rem}
+footer .cta{margin-bottom:20px}
+.priv li{margin:8px 0 8px 20px;color:var(--mut)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}.rv{opacity:1;transform:none}}
+
+body{background:radial-gradient(900px 520px at 88% -5%,rgba(45,212,191,.2),transparent 60%),radial-gradient(760px 520px at -10% 28%,rgba(59,130,246,.16),transparent 60%),var(--bg);background-attachment:fixed}
+:root[data-theme=light] body{background:radial-gradient(900px 520px at 88% -5%,rgba(45,212,191,.22),transparent 60%),radial-gradient(760px 520px at -10% 28%,rgba(59,130,246,.14),transparent 60%),var(--bg)}
+section{padding:88px 0}
+h2{letter-spacing:-.02em}
+h1{letter-spacing:-.03em}
+.badge{display:inline-block;padding:7px 16px;border-radius:999px;border:1px solid var(--bd);background:var(--card);font-size:.82rem;font-weight:600;margin-bottom:18px;backdrop-filter:blur(8px)}
+.trust{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:22px;font-size:.88rem;color:var(--mut)}
+.trust b{color:var(--ac)}
+@media(max-width:860px){.trust{justify-content:center}}
+.btn{box-shadow:0 10px 30px -8px rgba(45,212,191,.55)}
+.btn.o,.btn.ico{box-shadow:none}
+.card{position:relative;overflow:hidden;transition:transform .25s,border-color .25s}
+.card:hover{transform:translateY(-5px);border-color:var(--ac)}
+.card:before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--grad);opacity:.8}
+.card .e{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,rgba(45,212,191,.2),rgba(59,130,246,.2));font-size:1.5rem}
+.phone{transform:rotate(-3deg);box-shadow:0 40px 90px -20px rgba(45,212,191,.45),0 0 0 1px rgba(255,255,255,.08)}
+.hero .phone{animation:fl 6s ease-in-out infinite}
+@keyframes fl{50%{transform:rotate(-3deg) translateY(-12px)}}
+.mid{background:linear-gradient(135deg,rgba(45,212,191,.14),rgba(59,130,246,.14))}
+details{transition:border-color .2s}details[open]{border-color:var(--ac)}
+
+:root,:root[data-theme=dark]{--bg:#0A1020;--bg2:#101a30;--card:rgba(255,255,255,.07);--bd:rgba(255,255,255,.14);--mut:#b4c0d0;color-scheme:dark}
+body{background:radial-gradient(1000px 600px at 92% -10%,rgba(45,212,191,.38),transparent 60%),radial-gradient(900px 700px at -15% 22%,rgba(59,130,246,.34),transparent 60%),radial-gradient(800px 600px at 65% 85%,rgba(139,92,246,.26),transparent 60%),#0A1020;background-attachment:fixed}
+.blob{position:fixed;border-radius:50%;filter:blur(90px);opacity:.35;z-index:-1;pointer-events:none;animation:bl2 14s ease-in-out infinite alternate}
+.blob.a{width:340px;height:340px;background:#2DD4BF;top:12%;left:-90px}
+.blob.b{width:380px;height:380px;background:#8B5CF6;bottom:4%;right:-110px;animation-delay:-6s}
+@keyframes bl2{to{transform:translate(60px,-50px) scale(1.18)}}
+header{background:rgba(10,16,32,.55)}
+.g{background-size:220% 100%;background-image:linear-gradient(90deg,#2DD4BF,#60A5FA,#A78BFA,#2DD4BF);animation:sh 7s linear infinite}
+@keyframes sh{to{background-position:220% 0}}
+h1{font-size:clamp(2.5rem,7vw,4.4rem)}
+.hero{padding-top:70px;gap:50px}
+.hero p.sub{font-size:1.15rem}
+.btn{position:relative;overflow:hidden;font-weight:700}
+.btn:not(.o):after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);transform:translateX(-120%);transition:transform .7s}
+.btn:not(.o):hover:after{transform:translateX(120%)}
+.stats{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+.stats div{padding:12px 18px;border-radius:18px;background:var(--card);border:1px solid var(--bd);backdrop-filter:blur(10px);min-width:110px}
+.stats b{display:block;font-size:1.35rem;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.stats span{font-size:.8rem;color:var(--mut)}
+@media(max-width:860px){.stats{justify-content:center}}
+.card{background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.03));backdrop-filter:blur(14px);border-radius:24px}
+.card:hover{box-shadow:0 18px 40px -16px rgba(45,212,191,.5)}
+.card:nth-child(4n+2) .e{background:linear-gradient(135deg,rgba(59,130,246,.35),rgba(139,92,246,.3))}
+.card:nth-child(4n+3) .e{background:linear-gradient(135deg,rgba(236,72,153,.3),rgba(251,146,60,.28))}
+.card:nth-child(4n) .e{background:linear-gradient(135deg,rgba(34,197,94,.3),rgba(45,212,191,.3))}
+.card .e{width:56px;height:56px;border-radius:18px;margin-bottom:6px}
+#forces h2,#installer h2,#faq h2,#contact h2{text-align:center}
+#forces>.sub,#installer>.sub{margin-inline:auto;text-align:center}
+.mid{background:linear-gradient(120deg,rgba(45,212,191,.28),rgba(59,130,246,.28),rgba(139,92,246,.28));border-block:1px solid var(--bd)}
+.mid h2{font-size:clamp(1.8rem,5vw,2.8rem)}
+#installer{background:rgba(255,255,255,.05);border:1px solid var(--bd);border-radius:34px;padding:54px 28px;width:calc(100% - 28px);backdrop-filter:blur(12px)}
+.tabs{justify-content:center}
+ol.st li{border-radius:18px;font-size:.98rem}
+.phone{border-color:#2a3142}
+details{border-radius:18px;background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.03))}
+input,select,textarea{background:rgba(255,255,255,.07);border-radius:14px}
+#contact form{background:rgba(255,255,255,.05);border:1px solid var(--bd);border-radius:26px;padding:26px;max-width:640px;margin-inline:auto;backdrop-filter:blur(12px)}
+#contact .sub,#contact .join{text-align:center;justify-content:center;margin-inline:auto}
+#joinbtn{display:flex;margin:0 auto}
+.join span{background:linear-gradient(135deg,rgba(45,212,191,.2),rgba(59,130,246,.2))}
+footer{background:rgba(0,0,0,.25)}
+</style>
+</head>
+<body>
+<div class="blob a"></div><div class="blob b"></div>
+<header><div class="wrap"><nav>
+<a class="logo" href="#top"><i></i>Sans-Trace</a>
+<a class="l" href="#forces">Points forts</a><a class="l" href="#installer">Installer</a><a class="l" href="#faq">FAQ</a><a class="l" href="#contact">Contact</a>
+<a class="btn s" href="https://gae03052014-cell.github.io/Gaetan/">Ouvrir l'application</a>
+</nav></div></header>
+
+<main id="top">
+<section class="wrap hero" style="padding-top:56px">
+<div>
+<!-- Autres slogans possibles : « Ton pseudo, ta conversation, rien de plus. » / « La messagerie qui ne te demande ni numéro ni e-mail. » -->
+<span class="badge">🔒 Messagerie pseudonyme · sans numéro, sans e-mail</span>
+<h1>Discute <span class="g">sans laisser de trace</span></h1>
+<p class="sub">Sans-Trace est une messagerie pseudonyme : pas de numéro de téléphone, pas d'e-mail. Tu te connectes avec un code ami et un mot de passe, et tu l'installes en 30 secondes depuis ton navigateur.</p>
+<div class="cta"><a class="btn" href="https://gae03052014-cell.github.io/Gaetan/">Ouvrir l'application →</a><a class="btn o" href="#installer">Installer en 30 secondes</a></div>
+<div class="trust"><span><b>✓</b> Sans numéro</span><span><b>✓</b> Sans e-mail</span><span><b>✓</b> Sans boutique d'applications</span></div>
+<div class="stats"><div><b>7</b><span>thèmes</span></div><div><b>E2E</b><span>discussions privées</span></div><div><b>30 s</b><span>pour installer</span></div></div>
+<p class="note">Gratuité et tarifs : [à confirmer]</p>
+</div>
+<div class="phone" aria-label="Démo animée d'une conversation Sans-Trace">
+<div class="top"><span class="av"></span>Alex<span style="margin-left:auto;color:#2DD4BF;font-size:.7rem">🔒 chiffré</span></div>
+<div class="chat" id="demo"></div>
+</div>
+</section>
+
+<section id="forces" class="wrap">
+<h2>Tout ce qu'il faut, <span class="g">rien de superflu</span></h2>
+<p class="sub">Une messagerie complète, pensée pour la discrétion.</p>
+<div class="grid">
+<div class="card rv"><span class="e">🔐</span><b>Chiffrement de bout en bout</b><p>Pour les discussions privées. Attention : les groupes ne sont pas chiffrés de bout en bout.</p></div>
+<div class="card rv"><span class="e">🎭</span><b>Pseudonyme</b><p>Pas de numéro ni d'e-mail : connexion par code ami et mot de passe.</p></div>
+<div class="card rv"><span class="e">📞</span><b>Appels audio et vidéo</b><p>En tête-à-tête ou en groupe.</p></div>
+<div class="card rv"><span class="e">🖼️</span><b>Photos avec un message</b><p>Une image et son texte partent ensemble, dans le même envoi.</p></div>
+<div class="card rv"><span class="e">🎙️</span><b>Messages vocaux</b><p>Vitesse de lecture réglable et version texte.</p></div>
+<div class="card rv"><span class="e">⏳</span><b>Éphémères et programmés</b><p>Fais disparaître un message, ou envoie-le plus tard.</p></div>
+<div class="card rv"><span class="e">📊</span><b>Sondages</b><p>Décidez à plusieurs en un clic.</p></div>
+<div class="card rv"><span class="e">📍</span><b>Position avec ton accord</b><p>Elle n'est partagée que si tu l'autorises.</p></div>
+<div class="card rv"><span class="e">🧑‍🎨</span><b>Avatars personnalisables</b><p>Crée un personnage qui te ressemble.</p></div>
+<div class="card rv"><span class="e">🤖</span><b>Assistant IA intégré</b><p>Une aide à portée de discussion.</p></div>
+<div class="card rv"><span class="e">🎨</span><b>7 thèmes</b><p>Choisis l'ambiance de ton appli.</p></div>
+<div class="card rv"><span class="e">📱💻</span><b>Téléphone et ordinateur</b><p>L'affichage s'adapte à ton écran.</p></div>
+</div>
+</section>
+
+<section class="mid"><div class="wrap">
+<h2>Prête à l'emploi, <span class="g">sans boutique</span></h2>
+<p class="sub" style="margin:0 auto 22px">Pas de store, pas d'attente : ouvre le lien et installe.</p>
+<a class="btn" href="https://gae03052014-cell.github.io/Gaetan/">Ouvrir l'application →</a>
+</div></section>
+
+<section id="installer" class="wrap">
+<h2>Installer en <span class="g">30 secondes</span></h2>
+<div class="tabs" role="tablist">
+<button class="tab" role="tab" aria-selected="true" data-t="0">Android</button>
+<button class="tab" role="tab" aria-selected="false" data-t="1">iPhone</button>
+<button class="tab" role="tab" aria-selected="false" data-t="2">Ordinateur</button>
+</div>
+<div class="inst">
+<ol class="st" id="steps" aria-live="polite"></ol>
+<div id="ph"><div class="phone" style="width:240px;height:440px"><div class="scr" id="scr">
+<div class="url" id="u">sans-trace</div>
+<div class="menu" id="menu"></div>
+<div class="home"><i></i><i></i><i></i><i class="n" id="ni"></i></div>
+<div class="fing" id="fg" style="left:120px;top:300px"></div>
+</div></div></div>
+<div class="mac" id="mac" hidden><div class="bar"><i></i><i></i><i></i><span>sans-trace ⊕ Installer</span></div>
+<div class="body"><div class="sd"><i></i><i></i><i></i></div><div class="mn"><div class="b in">Salut ! 👋</div><div class="b out">Installée sur mon PC !</div></div></div></div>
+</div>
+</section>
+
+<section class="wrap" style="padding-top:0">
+<h2>L'appli en images</h2>
+<p class="sub">Mes vraies captures arriveront ici.</p>
+<div class="car"><div class="slides">
+<!-- Remplace chaque bloc .ph par : <img src="capture1.png" alt="Description de la capture"> -->
+<div class="ph">Capture 1<br>[à confirmer]</div>
+<div class="ph">Capture 2<br>[à confirmer]</div>
+<div class="ph">Capture 3<br>[à confirmer]</div>
+<div class="ph">Capture 4<br>[à confirmer]</div>
+</div></div>
+</section>
+
+<section id="faq" class="wrap">
+<h2>Questions fréquentes</h2>
+<details><summary>Mes messages sont-ils chiffrés ?</summary><p>Les discussions privées sont chiffrées de bout en bout. Les groupes ne le sont pas. Aucun service ne peut promettre une absence totale de trace : nous ne le prétendons pas.</p></details>
+<details><summary>Comment je m'inscris sans numéro ni e-mail ?</summary><p>Tu crées un compte avec un pseudo et un mot de passe, puis tu partages ton code ami pour ajouter des contacts.</p></details>
+<details><summary>Comment installer l'application ?</summary><p>Depuis ton navigateur, sans boutique d'applications : voir la section « Installer en 30 secondes ».</p></details>
+<details><summary>Les notifications marchent-elles appli fermée ?</summary><p>Oui, sur Android avec un Chrome à jour, ou sur iPhone sous iOS 16.4 minimum avec l'appli ajoutée à l'écran d'accueil.</p></details>
+<details><summary>Sur quels appareils ça marche ?</summary><p>Téléphone et ordinateur, avec un navigateur récent (Chrome, Edge, Safari).</p></details>
+<details><summary>Que deviennent mes données ?</summary><p>Voir la section Confidentialité ci-dessous. Détails complets : [à confirmer].</p></details>
+<details><summary>Est-ce gratuit ?</summary><p>[à confirmer]</p></details>
+</section>
+
+<section id="contact" class="wrap">
+<h2>Contact, idées, <span class="g">collaboration</span></h2>
+<p class="sub">Une question, une idée, l'envie de participer ? Écris-nous.</p>
+<div class="join" id="rejoindre"><span>🧪 Testeurs</span><span>🎨 Designers</span><span>🌍 Traducteurs</span><span>💻 Développeurs</span></div>
+<button class="btn o" id="joinbtn" type="button">Rejoindre le projet</button>
+<form id="f" novalidate>
+<label>Type<select id="type"><option>Contact</option><option>Idée</option><option>Collaboration</option></select></label>
+<label>Nom<input id="nom" maxlength="60" required autocomplete="nickname"></label>
+<label>E-mail (facultatif)<input id="mail" type="email" maxlength="100" autocomplete="email"></label>
+<label>Message <span id="cnt" style="font-weight:400;color:var(--mut)">0/600</span><textarea id="txt" maxlength="600" required></textarea></label>
+<input class="hp" id="site" tabindex="-1" autocomplete="off" aria-hidden="true">
+<button class="btn" type="submit" id="send">Envoyer</button>
+<div id="msg" role="status"></div>
+</form>
+</section>
+
+<section id="confidentialite" class="wrap">
+<h2>Confidentialité</h2>
+<ul class="priv">
+<li>Pas de numéro de téléphone ni d'e-mail pour créer un compte.</li>
+<li>Discussions privées chiffrées de bout en bout ; groupes non chiffrés de bout en bout.</li>
+<li>Ta position n'est partagée qu'avec ton accord.</li>
+<li>Le formulaire de ce site n'envoie que ce que tu y écris (type, nom, e-mail facultatif, message).</li>
+<li>Durées de conservation et détails techniques : [à confirmer].</li>
+</ul>
+</section>
+</main>
+
+<footer><div class="wrap">
+<div class="cta"><a class="btn" href="https://gae03052014-cell.github.io/Gaetan/">Ouvrir l'application →</a></div>
+<p>Un projet de sans-sans · <a href="mailto:gae03052014@gmail.com">gae03052014@gmail.com</a></p>
+<p style="margin-top:6px">© 2026 Sans-Trace · <a href="#confidentialite">Confidentialité</a></p>
+</div></footer>
+
+<script>
+(function(){
+var $=function(s){return document.querySelector(s)},rm=matchMedia('(prefers-reduced-motion:reduce)').matches;
+/* thème */
+document.documentElement.dataset.theme='dark';
+/* apparition */
+var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('on');io.unobserve(e.target)}})},{threshold:.15});
+document.querySelectorAll('.rv').forEach(function(e){rm?e.classList.add('on'):io.observe(e)});
+/* démo conversation */
+var d=$('#demo'),sc=[['in','Salut ! Tu as vu la nouvelle appli ?'],['out','Oui, Sans-Trace, sans numéro ni e-mail 😎'],['in','Trop bien. Envoie-moi ton code ami !'],['out','C\'est parti, je te l\'envoie 🔐',1]];
+function add(c,t,h){var b=document.createElement('div');b.className='b '+c;b.textContent=t;if(h){var s=document.createElement('span');s.className='h';s.textContent='❤️';b.appendChild(s)}d.appendChild(b);while(d.children.length>6)d.removeChild(d.firstChild);return b}
+function run(){d.innerHTML='';var i=0;(function n(){if(i>=sc.length){if(!rm)setTimeout(run,4000);return}var m=sc[i++];if(m[0]==='in'&&!rm){var t=document.createElement('div');t.className='typ';t.innerHTML='<s></s><s></s><s></s>';d.appendChild(t);setTimeout(function(){t.remove();add(m[0],m[1]);setTimeout(n,1100)},1100)}else{add(m[0],m[1],m[2]);setTimeout(n,rm?0:1400)}})()}
+run();
+/* installation */
+var D=[
+{u:'sans-trace · Chrome',s:['Ouvre le lien dans Chrome.','Touche le menu ⋮ en haut à droite.','Choisis « Installer l\'application ».','Ouvre Sans-Trace depuis son icône.'],m:['Nouvel onglet','<span class="hl">Installer l\'application</span>','Paramètres'],f:[[120,300],[190,50],[160,95],[205,372]]},
+{u:'sans-trace · Safari',s:['Ouvre le lien dans Safari.','Touche Partager (carré avec flèche).','Choisis « Sur l\'écran d\'accueil », puis Ajouter.','Ouvre l\'appli depuis l\'icône (obligatoire pour les notifications).'],m:['Copier','<span class="hl">Sur l\'écran d\'accueil</span>','Imprimer'],f:[[120,300],[120,50],[160,95],[205,372]]},
+{u:'sans-trace · Chrome / Edge',s:['Ouvre le lien dans Chrome ou Edge.','Clique sur l\'icône « Installer » dans la barre d\'adresse.','Confirme avec « Installer ».','Lance Sans-Trace depuis ton bureau.'],m:[],f:[]}],
+tab=0,k=0,tm;
+function show(){var o=D[tab];$('#steps').innerHTML=o.s.map(function(t){return'<li>'+t+'</li>'}).join('');$('#menu').innerHTML=o.m.join('');$('#u').textContent=o.u;$('#ph').hidden=tab===2;$('#mac').hidden=tab!==2;k=0;tick()}
+function tick(){var o=D[tab],L=document.querySelectorAll('#steps li');L.forEach(function(l,i){l.classList.toggle('on',i===k)});
+$('#menu').classList.toggle('on',k===1||k===2);$('#ni').classList.toggle('on',k===3);var p=o.f[k];if(p){var g=$('#fg');g.style.left=p[0]+'px';g.style.top=p[1]+'px'}
+clearTimeout(tm);if(!rm)tm=setTimeout(function(){k=(k+1)%4;tick()},2200)}
+document.querySelectorAll('.tab').forEach(function(b){b.onclick=function(){document.querySelectorAll('.tab').forEach(function(x){x.setAttribute('aria-selected','false')});b.setAttribute('aria-selected','true');tab=+b.dataset.t;show()}});
+show();
+/* formulaire */
+var T=$('#txt');T.oninput=function(){$('#cnt').textContent=T.value.length+'/600'};
+$('#joinbtn').onclick=function(){$('#type').value='Collaboration';$('#contact').scrollIntoView({behavior:rm?'auto':'smooth'});$('#nom').focus({preventScroll:true})};
+function say(c,t){var m=$('#msg');m.className=c;m.textContent=t}
+$('#f').onsubmit=function(e){e.preventDefault();
+if($('#site').value)return;
+var nom=$('#nom').value.trim().slice(0,60),mail=$('#mail').value.trim().slice(0,100),txt=T.value.trim().slice(0,600),ty=$('#type').value;
+if(!nom||!txt)return say('er','Merci de renseigner ton nom et ton message.');
+if(mail&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail))return say('er','Cette adresse e-mail semble incorrecte.');
+var last=0;try{last=+localStorage.getItem('st-last')||0}catch(x){}
+var w=30000-(Date.now()-last);if(w>0)return say('er','Un instant : réessaie dans '+Math.ceil(w/1000)+' s.');
+var id=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+var t={id:id,name:nom+' ('+ty+')'+(mail?' — '+mail:''),text:txt,ts:Date.now(),status:'open',replies:[]};
+$('#send').disabled=true;say('ok','Envoi en cours…');
+fetch('https://messagame-e5a03-default-rtdb.europe-west1.firebasedatabase.app/s/support%3A'+id+'.json',{method:'PUT',body:JSON.stringify(JSON.stringify(t))})
+.then(function(r){if(!r.ok)throw 0;try{localStorage.setItem('st-last',Date.now())}catch(x){}say('ok','Merci ! Ton message est bien envoyé. 💙');$('#f').reset();$('#cnt').textContent='0/600'})
+.catch(function(){var a=document.createElement('a');a.href='mailto:gae03052014@gmail.com?subject='+encodeURIComponent('Sans-Trace — '+ty)+'&body='+encodeURIComponent(txt);a.textContent='écris-nous par e-mail';var m=$('#msg');m.className='er';m.textContent="L'envoi a échoué. Tu peux réessayer ou ";m.appendChild(a);m.append('.')})
+.finally(function(){$('#send').disabled=false})};
+})();
+</script>
+</body>
+</html>
