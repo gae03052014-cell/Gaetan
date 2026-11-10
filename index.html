@@ -2386,8 +2386,10 @@ const AVATAR_PALETTE = [
     "#2DD4BF", "#FF6B5D", "#E8A33D", "#8B7FD9", "#4EA1D3", "#E86BA0",
 ];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const APP_VERSION = "5.3";
+const APP_VERSION = "5.3.2";
 const NEWS = [
+    ["🎬", "Flux vertical", "Un nouvel onglet Flux : fais défiler à l'infini les vidéos, stories et vidéos longues de tes amis, comme sur Snap."],
+    ["🎥", "Vidéos et filtres visage", "Filme directement dans l'appli (story 30 s ou vidéo longue 3 min), avec filtres de couleur et accessoires sur le visage."],
     ["🔙", "Bouton retour", "Le bouton retour du téléphone ferme les fenêtres et revient en arrière, sans quitter l'appli."],
     ["👤", "Prénom", "Chaque utilisateur indique son prénom : demandé à l'inscription, et une fois pour les comptes existants."],
     ["🎯", "Code ami au choix", "Choisis ton code ami dès l'inscription (3 à 12 lettres ou chiffres), modifiable ensuite."],
@@ -3272,12 +3274,132 @@ function NavIcon({ name }) {
         return RE("svg", p, RE("path", { d: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" }));
     if (name === "stories")
         return RE("svg", p, RE("circle", { cx: 12, cy: 12, r: 9, strokeDasharray: "3 2.4" }), RE("circle", { cx: 12, cy: 12, r: 4 }));
+    if (name === "flux")
+        return RE("svg", p, RE("rect", { x: 6, y: 3, width: 12, height: 18, rx: 3 }), RE("path", { d: "M11 9.5l3 2.5-3 2.5z" }));
     if (name === "discover")
         return RE("svg", p, RE("circle", { cx: 11, cy: 11, r: 7 }), RE("path", { d: "M21 21l-4.3-4.3" }));
     return RE("svg", p, RE("circle", { cx: 12, cy: 8, r: 4 }), RE("path", { d: "M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" }));
 }
+/* ===== v5.3.2 : Flux vertical, vidéos, filtres visage ===== */
+const VCH = 512 * 1024, VSTORY_MAX = 30, VLONG_MAX = 180, VTOT = 12 * 1024 * 1024;
+const FACE_FX = [["none", "Aucun", "", ""], ["lun", "Lunettes", "😎", "eyes"], ["cou", "Couronne", "👑", "head"], ["chi", "Chien", "🐶", "face"], ["coe", "Cœurs", "😍", "eyes"], ["clo", "Clown", "🤡", "nose"], ["fle", "Fleurs", "🌸", "head"]];
+function blobToB64(b) { return new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.readAsDataURL(b); }); }
+function b64ToBlob(s, t) { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: t }); }
+async function postVideo(me, blob, meta) {
+    const id = "v" + Date.now() + Math.random().toString(36).slice(2, 6), n = Math.ceil(blob.size / VCH);
+    for (let i = 0; i < n; i++) { if (!(await safeSet("vc:" + id + ":" + i, await blobToB64(blob.slice(i * VCH, (i + 1) * VCH)), true))) return false; }
+    const list = parseList(await safeGet("vlist:" + me.id, true)).filter((v) => v && (!v.st || Date.now() - v.ts < 864e5));
+    list.push(Object.assign({ id, ts: Date.now(), n, mt: blob.type }, meta));
+    return safeSet("vlist:" + me.id, JSON.stringify(list.slice(-30)), true);
+}
+async function loadVideoUrl(v) {
+    const parts = [];
+    for (let i = 0; i < v.n; i++) { const s = await safeGet("vc:" + v.id + ":" + i, true); if (!s) return null; parts.push(b64ToBlob(s, v.mt)); }
+    return URL.createObjectURL(new Blob(parts, { type: v.mt }));
+}
+async function loadFluxAll(me, feed) {
+    const ids = (await getFriendIds(me)).concat([me.id]);
+    const names = {}; ((feed && feed.groups) || []).forEach((g) => { names[g.uid] = g.first || g.pseudo; }); names[me.id] = me.pseudo;
+    const out = [];
+    await Promise.all(ids.map(async (uid) => {
+        const l = parseList(await safeGet("vlist:" + uid, true)).filter((v) => v && (!v.st || Date.now() - v.ts < 864e5));
+        l.forEach((v) => out.push(Object.assign({}, v, { uid, who: names[uid] || "Ami", kind: "vid" })));
+    }));
+    ((feed && feed.groups) || []).forEach((g) => g.items.forEach((i) => out.push({ id: i.id, ts: i.ts, uid: g.uid, who: g.first || g.pseudo, kind: "story", it: i })));
+    return out.sort((a, b) => b.ts - a.ts);
+}
+function FluxCard({ me, x, active, flash, onDel }) {
+    const [url, setUrl] = React.useState(null), [likes, setLikes] = React.useState(0), [liked, setLiked] = React.useState(false), [err, setErr] = React.useState(false);
+    const vr = React.useRef(null);
+    React.useEffect(() => { if (x.kind !== "vid" || !active || url) return; let ok = true; loadVideoUrl(x).then((u) => { if (!ok) return; u ? setUrl(u) : setErr(true); }); return () => { ok = false; }; }, [active]);
+    React.useEffect(() => { if (x.kind !== "vid") return; safeList("vl:" + x.id + ":").then((k) => { setLikes(k.length); setLiked(k.indexOf("vl:" + x.id + ":" + me.id) !== -1); }); }, [x.id]);
+    React.useEffect(() => { const v = vr.current; if (!v) return; if (active) v.play().catch(() => { v.muted = true; v.play().catch(() => { }); }); else v.pause(); }, [active, url]);
+    const like = async () => { const k = "vl:" + x.id + ":" + me.id; if (liked) { await safeDelete(k, true); setLikes(likes - 1); } else { await safeSet(k, "1", true); setLikes(likes + 1); } setLiked(!liked); };
+    const long = x.kind === "vid" && x.lg, it = x.it;
+    return RE("div", { className: "fluxCard", style: { height: "100%", scrollSnapAlign: "start", scrollSnapStop: "always", position: "relative", background: "#000", color: "#fff", overflow: "hidden" } },
+        x.kind === "vid" && (url ? RE("video", { ref: vr, src: url, loop: true, playsInline: true, controls: !!long, onClick: (e) => { if (!long) { const v = e.currentTarget; v.paused ? v.play() : v.pause(); } }, style: { width: "100%", height: "100%", objectFit: long ? "contain" : "cover" } }) : RE("div", { className: "flex h-full items-center justify-center text-sm opacity-70" }, err ? "Vidéo indisponible" : "Chargement…")),
+        x.kind === "story" && (it.k === "img" ? RE("img", { src: it.c, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", filter: fcss(it.fl) } }) : RE("div", { className: "flex h-full items-center justify-center p-8 text-center text-2xl", style: Object.assign({ background: "linear-gradient(160deg,#1d4e89,#7b2d8e)" }, storyTxt(it)) }, it.c)),
+        RE("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 16px 18px", background: "linear-gradient(transparent,rgba(0,0,0,.65))", pointerEvents: "none" } },
+            RE("div", { className: "font-semibold" }, x.who, x.kind === "story" ? " · story" : x.st ? " · story vidéo" : long ? " · vidéo longue" : "", RE("span", { className: "opacity-70 font-normal" }, " · " + timeAgoShort(x.ts))),
+            RE("div", { className: "text-sm mt-1" }, x.title || x.cap || (it && it.cap) || "")),
+        x.kind === "vid" && RE("div", { style: { position: "absolute", right: 12, bottom: long ? 80 : 90, display: "flex", flexDirection: "column", gap: 14, alignItems: "center" } },
+            RE("button", { onClick: like, className: "text-3xl", style: { filter: "drop-shadow(0 1px 4px #000)" } }, liked ? "❤️" : "🤍"), RE("span", { className: "text-xs -mt-3" }, likes),
+            x.uid === me.id && RE("button", { onClick: () => onDel(x), className: "text-xl" }, "🗑️")));
+}
+function FluxCamera({ me, onClose, onPosted, flash }) {
+    useBack(true, onClose);
+    const cv = React.useRef(null), vd = React.useRef(null), st = React.useRef({ fx: "none", fl: "none", cam: "user" }), rec = React.useRef(null), face = React.useRef(null);
+    const [fx, setFx] = React.useState("none"), [fl, setFl] = React.useState("none"), [mode, setMode] = React.useState("story"), [rd, setRd] = React.useState(false), [sec, setSec] = React.useState(0), [res, setRes] = React.useState(null), [cap, setCap] = React.useState(""), [busy, setBusy] = React.useState(false), [cam, setCam] = React.useState("user");
+    const modeR = React.useRef(mode); modeR.current = mode; st.current.fx = fx; st.current.fl = fl;
+    React.useEffect(() => {
+        let alive = true, stream = null, raf = 0, k = 0;
+        const FD = window.FaceDetector ? new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 }) : null;
+        (async () => {
+            try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cam, width: { ideal: 1280 } }, audio: true }); } catch (e) { flash("Caméra ou micro refusé."); onClose(); return; }
+            const v = vd.current; v.srcObject = stream; v.muted = true; await v.play().catch(() => { }); st.current.stream = stream;
+            const draw = () => {
+                if (!alive) return; const c = cv.current, g = c.getContext("2d"), vert = modeR.current === "story";
+                const W = vert ? 480 : 640, H = vert ? 854 : 360; if (c.width !== W) { c.width = W; c.height = H; }
+                const vw = v.videoWidth || W, vh = v.videoHeight || H, s = Math.max(W / vw, H / vh);
+                g.save(); g.filter = fcss(st.current.fl) || "none"; if (cam === "user") { g.translate(W, 0); g.scale(-1, 1); }
+                g.drawImage(v, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s); g.restore(); g.filter = "none";
+                const f = FACE_FX.filter((q) => q[0] === st.current.fx)[0];
+                if (f && f[2]) {
+                    if (FD && (k++ % 3 === 0)) FD.detect(v).then((r) => { if (r[0]) { const b = r[0].boundingBox, m = cam === "user"; face.current = { x: ((m ? vw - b.x - b.width : b.x) + b.width / 2) * s + (W - vw * s) / 2, y: (b.y + b.height / 2) * s + (H - vh * s) / 2, w: b.width * s }; } else face.current = null; }).catch(() => { });
+                    const fc = face.current || { x: W / 2, y: H * 0.42, w: W * 0.45 }, sz = fc.w * (f[3] === "face" ? 1.5 : f[3] === "nose" ? 0.35 : 0.8);
+                    const dy = f[3] === "eyes" ? -fc.w * 0.15 : f[3] === "head" ? -fc.w * 0.75 : f[3] === "nose" ? fc.w * 0.18 : 0;
+                    g.font = sz + "px serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(f[2], fc.x, fc.y + dy);
+                }
+                raf = requestAnimationFrame(draw);
+            }; draw();
+        })();
+        return () => { alive = false; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach((t) => t.stop()); };
+    }, [cam]);
+    React.useEffect(() => { if (!rd) return; const t = setInterval(() => setSec((s) => { const mx = mode === "story" ? VSTORY_MAX : VLONG_MAX; if (s + 1 >= mx) stop(); return s + 1; }), 1000); return () => clearInterval(t); }, [rd]);
+    const start = () => {
+        const cs = cv.current.captureStream(30), au = st.current.stream.getAudioTracks()[0]; if (au) cs.addTrack(au);
+        const mt = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].filter((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m))[0];
+        if (!mt) { flash("Enregistrement non supporté sur ce navigateur."); return; }
+        const ch = []; const r = new MediaRecorder(cs, { mimeType: mt, videoBitsPerSecond: mode === "story" ? 650000 : 420000, audioBitsPerSecond: 48000 });
+        r.ondataavailable = (e) => e.data.size && ch.push(e.data); r.onstop = () => { const b = new Blob(ch, { type: mt.split(";")[0] }); if (b.size > VTOT) flash("Vidéo trop lourde (12 Mo max)."); else setRes(b); };
+        r.start(1000); rec.current = r; setSec(0); setRd(true);
+    };
+    const stop = () => { if (rec.current && rec.current.state !== "inactive") rec.current.stop(); setRd(false); };
+    const importFile = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (f.size > VTOT) { flash("Fichier trop lourd (12 Mo max)."); return; } setRes(f); };
+    const publish = async () => { setBusy(true); const ok = await postVideo(me, res, mode === "story" ? { st: 1, cap } : { lg: 1, title: cap }); setBusy(false); if (ok) { flash("Vidéo publiée ✅"); onPosted(); } else flash("Échec de l'envoi."); };
+    const url = React.useMemo(() => res ? URL.createObjectURL(res) : null, [res]);
+    const chip = (a, on, f) => RE("button", { key: a, onClick: f, className: "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: on ? "#fff" : "rgba(255,255,255,.18)", color: on ? "#000" : "#fff" } }, a);
+    return RE("div", { style: { position: "fixed", inset: 0, zIndex: 80, background: "#000", color: "#fff", display: "flex", flexDirection: "column" } },
+        RE("video", { ref: vd, playsInline: true, muted: true, style: { display: "none" } }),
+        RE("div", { className: "flex items-center justify-between p-3" }, RE("button", { onClick: onClose, className: "text-xl px-2" }, "✕"), RE("div", { className: "flex gap-2" }, chip("Story 30 s", mode === "story", () => !rd && setMode("story")), chip("Vidéo longue 3 min", mode === "long", () => !rd && setMode("long"))), RE("button", { onClick: () => setCam(cam === "user" ? "environment" : "user"), className: "text-xl px-2" }, "🔄")),
+        RE("div", { className: "flex-1 min-h-0 flex items-center justify-center" }, res ? RE("video", { src: url, controls: true, playsInline: true, style: { maxWidth: "100%", maxHeight: "100%" } }) : RE("canvas", { ref: cv, style: { maxWidth: "100%", maxHeight: "100%" } })),
+        res ? RE("div", { className: "p-3 flex gap-2" }, RE("input", { value: cap, onChange: (e) => setCap(e.target.value), placeholder: mode === "story" ? "Légende" : "Titre de la vidéo", className: "flex-1 rounded-full px-4 py-2 text-sm text-black" }), RE("button", { onClick: () => setRes(null), className: "px-3" }, "↺"), RE("button", { disabled: busy, onClick: publish, className: "rounded-full px-5 py-2 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "Envoi…" : "Publier"))
+            : RE("div", { className: "p-3" },
+                RE("div", { className: "flex gap-2 overflow-x-auto pb-2" }, FACE_FX.map((f) => chip((f[2] || "🚫") + " " + f[1], fx === f[0], () => setFx(f[0])))),
+                RE("div", { className: "flex gap-2 overflow-x-auto pb-3" }, STORY_FILTERS.map((f) => chip(f[1], fl === f[0], () => setFl(f[0])))),
+                RE("div", { className: "flex items-center justify-around" }, RE("label", { className: "text-2xl" }, "📁", RE("input", { type: "file", accept: "video/*", onChange: importFile, style: { display: "none" } })),
+                    RE("button", { onClick: rd ? stop : start, style: { width: 68, height: 68, borderRadius: 34, border: "4px solid #fff", background: rd ? "#e11" : "transparent" } }, rd ? sec + " s" : ""), RE("span", { style: { width: 24 } }))));
+}
+function FluxTab({ me, feed, flash }) {
+    const [all, setAll] = React.useState(null), [n, setN] = React.useState(6), [cur, setCur] = React.useState(0), [filt, setFilt] = React.useState("all"), [cam, setCam] = React.useState(false), [ver, setVer] = React.useState(0);
+    const box = React.useRef(null);
+    React.useEffect(() => { loadFluxAll(me, feed).then(setAll); }, [feed, ver]);
+    const base = (all || []).filter((x) => filt === "all" || (filt === "long" ? x.lg : !x.lg));
+    const items = []; if (base.length) for (let i = 0; i < n; i++) { const x = base[i % base.length]; items.push(Object.assign({}, x, { key: x.id + "_" + Math.floor(i / base.length) + "_" + i })); }
+    const onScroll = (e) => { const h = e.currentTarget.clientHeight, i = Math.round(e.currentTarget.scrollTop / h); if (i !== cur) setCur(i); if (i >= n - 3) setN(n + 6); };
+    const del = async (x) => { const l = parseList(await safeGet("vlist:" + me.id, true)).filter((v) => v.id !== x.id); l.length ? await safeSet("vlist:" + me.id, JSON.stringify(l), true) : await safeDelete("vlist:" + me.id, true); const ks = await safeList("vc:" + x.id + ":"); await Promise.all(ks.map((k) => safeDelete(k, true))); setVer(ver + 1); };
+    return RE("div", { className: "h-full relative", style: { background: "#000" } },
+        cam && RE(FluxCamera, { me, flash, onClose: () => setCam(false), onPosted: () => { setCam(false); setVer(ver + 1); } }),
+        RE("div", { className: "absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-3", style: { color: "#fff" } },
+            RE("div", { className: "flex gap-2" }, [["all", "Pour toi"], ["short", "Courtes"], ["long", "Longues"]].map((f) => RE("button", { key: f[0], onClick: () => { setFilt(f[0]); setCur(0); setN(6); if (box.current) box.current.scrollTop = 0; }, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: filt === f[0] ? "#fff" : "rgba(0,0,0,.4)", color: filt === f[0] ? "#000" : "#fff" } }, f[1]))),
+            RE("button", { onClick: () => setCam(true), className: "rounded-full px-4 py-2 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "🎥 Créer")),
+        !all ? RE("div", { className: "h-full flex items-center justify-center", style: { color: "#fff" } }, RE(Loader2, { size: 22, className: "animate-spin" }))
+            : !items.length ? RE("div", { className: "h-full flex flex-col items-center justify-center text-center p-8", style: { color: "#fff" } }, RE("div", { className: "text-5xl mb-3" }, "🎬"), RE("div", { className: "font-semibold" }, "Rien à regarder pour l'instant"), RE("div", { className: "text-sm opacity-70 mt-1" }, "Crée une vidéo ou invite des amis."))
+                : RE("div", { ref: box, onScroll, style: { height: "100%", overflowY: "scroll", scrollSnapType: "y mandatory", overscrollBehavior: "contain" } }, items.map((x, i) => RE("div", { key: x.key, style: { height: "100%" } }, RE(FluxCard, { me, x, active: i === cur, flash, onDel: del })))));
+}
+
 function BottomNav({ tab, setTab, dot }) {
-    const items = [["msgs", "Messages"], ["stories", "Stories"], ["discover", "Découvrir"], ["profile", "Profil"]];
+    const items = [["msgs", "Messages"], ["stories", "Stories"], ["flux", "Flux"], ["discover", "Découvrir"], ["profile", "Profil"]];
     return RE("div", { className: "stNav flex shrink-0" }, items.map((it) => RE("button", { key: it[0], onClick: () => setTab(it[0]), className: "flex-1 flex flex-col items-center gap-1 py-2.5 relative", style: { color: tab === it[0] ? "var(--accent-text)" : "var(--muted)" }, "aria-label": it[1] },
         RE(NavIcon, { name: it[0] }),
         RE("span", { className: "text-[11px] font-medium" }, it[1]),
@@ -3986,7 +4108,7 @@ function Home(props) {
     if (tab === "msgs")
         body = RE(HomeMsgs, Object.assign({}, props, { top: RE(StoriesStrip, { me: me, feed: feed, onOpen: openStories, onCompose: compose }), onEditCode: () => setCodeSheet(true) }));
     else
-        body = RE("div", { className: "h-full flex flex-col", style: bodyStyle }, tab === "stories" ? RE(StoriesTab, { me: me, feed: feed, onOpen: openStories, onCompose: compose }) : tab === "discover" ? RE(DiscoverTab, { me: me, prefs: prefs, onOpenChat: props.onOpenChat, goProfile: () => setTab("profile"), flash: flash }) : RE(ProfileTab, { me: me, onProfileUpdate: props.onProfileUpdate, onSettings: props.onSettings, onEditCode: () => setCodeSheet(true), flash: flash }));
+        body = RE("div", { className: "h-full flex flex-col", style: bodyStyle }, tab === "flux" ? RE(FluxTab, { me: me, feed: feed, flash: flash }) : tab === "stories" ? RE(StoriesTab, { me: me, feed: feed, onOpen: openStories, onCompose: compose }) : tab === "discover" ? RE(DiscoverTab, { me: me, prefs: prefs, onOpenChat: props.onOpenChat, goProfile: () => setTab("profile"), flash: flash }) : RE(ProfileTab, { me: me, onProfileUpdate: props.onProfileUpdate, onSettings: props.onSettings, onEditCode: () => setCodeSheet(true), flash: flash }));
     return RE("div", { className: "h-full flex flex-col", style: { background: "var(--bg)", color: "var(--fg)" } },
         RE("div", { className: "flex-1 min-h-0 relative" }, RE("div", { className: "absolute inset-0 flex flex-col" }, body)),
         RE(BottomNav, { tab: tab, setTab: setTab, dot: !!(feed && feed.groups.some((g) => g.unseen)) }),
