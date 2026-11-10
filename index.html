@@ -1892,7 +1892,7 @@ function PollBubble({ m, me, onVote }) {
             total > 1 ? "s" : "")));
 }
 function MediaSheet({ messages, onOpen, onClose }) {
-    const imgs = messages.filter((m) => m.type === "image" && !m.deleted && m.content);
+    const imgs = messages.filter((m) => m.type === "image" && !m.once && !m.deleted && m.content);
     const files = messages.filter((m) => m.type === "file" && !m.deleted);
     return (React.createElement(Sheet, { title: "\uD83D\uDDBC\uFE0F M\u00E9dias de la discussion", onClose: onClose },
         imgs.length === 0 && files.length === 0 && React.createElement("p", { className: "text-sm", style: { color: "var(--muted)" } }, "Aucune photo ni aucun fichier pour l'instant."),
@@ -2328,8 +2328,13 @@ const AVATAR_PALETTE = [
     "#2DD4BF", "#FF6B5D", "#E8A33D", "#8B7FD9", "#4EA1D3", "#E86BA0",
 ];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const APP_VERSION = "5.1";
+const APP_VERSION = "5.2";
 const NEWS = [
+    ["📸", "Stories 24 h", "Partage une photo ou un texte pendant 24 h : vues, réponses et amis proches."],
+    ["🔥", "Flammes", "Discute chaque jour avec un ami pour garder ta flamme allumée."],
+    ["👁️", "Photo à vue unique", "Elle disparaît dès qu'elle a été ouverte."],
+    ["✏️", "Code ami modifiable", "Choisis ton propre code dans Profil ou Réglages."],
+    ["🧭", "Découvrir et Profil", "Nouvelle barre d'onglets, bio et profils visibles si tu le souhaites."],
     ["🖼️", "Plusieurs photos d'un coup", "Choisis jusqu'à 10 photos et envoie-les ensemble, avec une légende."],
     ["👆", "Empreinte ou visage", "Déverrouille l'appli avec ta biométrie, le code reste en secours (Réglages → Sécurité)."],
     ["🖥️", "Partage d'écran", "Partage ton écran pendant un appel vidéo, en duo ou en groupe (sur ordinateur)."],
@@ -2591,8 +2596,8 @@ function ensureAdmin() {
 function deleteAccountData(id, code) {
     return __awaiter(this, void 0, void 0, function* () {
         const keys = yield safeList("");
-        const mine = ["account:" + code, "codeIndex:" + code, "profile:" + id, "seen:" + id, "inbox:" + id, "banned:" + id, "groups:" + id, "pub:" + id, "keybak:" + id, "push:" + id, "notif:" + id, "warn:" + id, "kick:" + id];
-        const rel = keys.filter((k) => /^(conv|last|read|unread|typing):/.test(k) && k.indexOf(id) !== -1);
+        const mine = ["account:" + code, "codeIndex:" + code, "profile:" + id, "seen:" + id, "inbox:" + id, "banned:" + id, "story:" + id, "disc:" + id, "groups:" + id, "pub:" + id, "keybak:" + id, "push:" + id, "notif:" + id, "warn:" + id, "kick:" + id];
+        const rel = keys.filter((k) => /^(conv|last|read|unread|typing|streak):/.test(k) && k.indexOf(id) !== -1);
         yield Promise.all(mine.concat(rel).map((k) => safeDelete(k, true)));
         const inboxes = keys.filter((k) => k.indexOf("inbox:") === 0 && k !== "inbox:" + id);
         for (let i = 0; i < inboxes.length; i++) {
@@ -2923,7 +2928,714 @@ function SignIn({ onBack, onDone }) {
         React.createElement("button", { onClick: submit, disabled: busy, className: "w-full rounded-2xl py-4 text-base font-semibold flex items-center justify-center gap-2 disabled:opacity-60 mt-1", style: { background: "linear-gradient(135deg, var(--accent), " + cm("var(--accent)", 78, "#3B82F6") + ")", color: "var(--on-accent)", boxShadow: "0 8px 22px -8px " + cm("var(--accent)", 65, "transparent") + "" } }, busy ? React.createElement(Loader2, { size: 18, className: "animate-spin" }) : "Se connecter"),
         React.createElement(SupportButton, null)));
 }
-function Home({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs, onPrefs }) {
+const RE = React.createElement;
+function parseList(raw) {
+    try {
+        const a = raw ? JSON.parse(raw) : [];
+        return Array.isArray(a) ? a : [];
+    }
+    catch (e) {
+        return [];
+    }
+}
+function parseObj(raw) {
+    try {
+        const o = raw ? JSON.parse(raw) : {};
+        return o && typeof o === "object" ? o : {};
+    }
+    catch (e) {
+        return {};
+    }
+}
+function dayKeyUTC(ts) {
+    return new Date(ts || Date.now()).toISOString().slice(0, 10);
+}
+function streakInfo(st) {
+    if (!st || !st.d)
+        return null;
+    if (st.d !== dayKeyUTC() && st.d !== dayKeyUTC(Date.now() - 86400000))
+        return null;
+    const n = st.n || 0;
+    if (n < 2)
+        return null;
+    return { n: n, risk: st.d !== dayKeyUTC() };
+}
+function bumpStreak(meId, otherId) {
+    const cid = convId(meId, otherId);
+    return safeGet("streak:" + cid, true).then((raw) => {
+        const st = parseObj(raw);
+        const today = dayKeyUTC();
+        const yest = dayKeyUTC(Date.now() - 86400000);
+        const s = st.s || {};
+        let changed = false;
+        if (s[meId] !== today) {
+            s[meId] = today;
+            changed = true;
+        }
+        if (s[meId] === today && s[otherId] === today && st.d !== today) {
+            st.n = st.d === yest ? (st.n || 0) + 1 : 1;
+            st.d = today;
+            changed = true;
+        }
+        if (!changed)
+            return null;
+        st.s = s;
+        return safeSet("streak:" + cid, JSON.stringify(st), true);
+    }).catch(() => null);
+}
+function ensureInbox(a, b) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const pairs = [[a, b], [b, a]];
+        for (let i = 0; i < pairs.length; i++) {
+            const inbox = parseList(yield safeGet("inbox:" + pairs[i][0], true));
+            if (inbox.indexOf(pairs[i][1]) === -1)
+                yield safeSet("inbox:" + pairs[i][0], JSON.stringify(inbox.concat([pairs[i][1]])), true);
+        }
+    });
+}
+const STORY_TTL = 86400000;
+const STORY_BGS = ["linear-gradient(135deg,#FF6B6B,#FFB86B)", "linear-gradient(135deg,#7F5AF0,#2CB1BC)", "linear-gradient(135deg,#00C9A7,#1E6FD9)", "linear-gradient(135deg,#F857A6,#FF5858)", "linear-gradient(135deg,#232526,#5A6470)", "linear-gradient(135deg,#F7971E,#B8860B)"];
+function sNewId() {
+    return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+function liveItems(list) {
+    const lim = Date.now() - STORY_TTL;
+    return list.filter((i) => i && i.ts > lim);
+}
+function timeAgoShort(ts) {
+    const m = Math.max(0, Math.round((Date.now() - ts) / 60000));
+    if (m < 1)
+        return "à l'instant";
+    if (m < 60)
+        return m + " min";
+    return Math.floor(m / 60) + " h";
+}
+function loadFeed(me, blocked) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const ids = (yield getFriendIds(me)).filter((x) => blocked.indexOf(x) === -1);
+        const seen = parseObj(yield safeGet("sseen", false));
+        const mine = liveItems(parseList(yield safeGet("story:" + me.id, true)));
+        const rows = yield Promise.all(ids.map((id) => __awaiter(this, void 0, void 0, function* () {
+            const r = yield Promise.all([safeGet("profile:" + id, true), safeGet("story:" + id, true)]);
+            if (!r[0])
+                return null;
+            const pr = parseObj(r[0]);
+            if (pr.avatar)
+                AVATARS[id] = pr.avatar;
+            const items = liveItems(parseList(r[1])).filter((i) => !i.aud || i.aud.indexOf(me.id) !== -1);
+            return { uid: id, pseudo: pr.pseudo || "?", items: items };
+        })));
+        const friends = rows.filter(Boolean);
+        const groups = friends.filter((g) => g.items.length).map((g) => Object.assign({}, g, { unseen: g.items.some((i) => !seen[i.id]) }));
+        groups.sort((a, b) => (Number(b.unseen) - Number(a.unseen)) || (b.items[b.items.length - 1].ts - a.items[a.items.length - 1].ts));
+        return { mine: mine, groups: groups, friends: friends.map((g) => ({ id: g.uid, pseudo: g.pseudo })) };
+    });
+}
+function postStory(me, item) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const all = parseList(yield safeGet("story:" + me.id, true));
+        const lim = Date.now() - STORY_TTL;
+        const old = all.filter((i) => i && i.ts <= lim);
+        for (let i = 0; i < old.length; i++) {
+            const ks = yield safeList("sv:" + old[i].id + ":");
+            yield Promise.all(ks.map((k) => safeDelete(k, true)));
+        }
+        const next = liveItems(all).concat([item]).slice(-10);
+        return safeSet("story:" + me.id, JSON.stringify(next), true);
+    });
+}
+function removeStory(me, id) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const all = parseList(yield safeGet("story:" + me.id, true));
+        const next = all.filter((i) => i && i.id !== id);
+        if (next.length)
+            yield safeSet("story:" + me.id, JSON.stringify(next), true);
+        else
+            yield safeDelete("story:" + me.id, true);
+        const ks = yield safeList("sv:" + id + ":");
+        yield Promise.all(ks.map((k) => safeDelete(k, true)));
+    });
+}
+function markStorySeen(me, uid, item) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const seen = parseObj(yield safeGet("sseen", false));
+        if (seen[item.id])
+            return;
+        seen[item.id] = Date.now();
+        const keys = Object.keys(seen);
+        if (keys.length > 300)
+            keys.sort((a, b) => seen[a] - seen[b]).slice(0, keys.length - 300).forEach((k) => { delete seen[k]; });
+        yield safeSet("sseen", JSON.stringify(seen), false);
+        if (uid !== me.id)
+            yield safeSet("sv:" + item.id + ":" + me.id, String(Date.now()), true);
+    });
+}
+function NavIcon({ name }) {
+    const p = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round", strokeLinejoin: "round" };
+    if (name === "msgs")
+        return RE("svg", p, RE("path", { d: "M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" }));
+    if (name === "stories")
+        return RE("svg", p, RE("circle", { cx: 12, cy: 12, r: 9, strokeDasharray: "3 2.4" }), RE("circle", { cx: 12, cy: 12, r: 4 }));
+    if (name === "discover")
+        return RE("svg", p, RE("circle", { cx: 11, cy: 11, r: 7 }), RE("path", { d: "M21 21l-4.3-4.3" }));
+    return RE("svg", p, RE("circle", { cx: 12, cy: 8, r: 4 }), RE("path", { d: "M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" }));
+}
+function BottomNav({ tab, setTab, dot }) {
+    const items = [["msgs", "Messages"], ["stories", "Stories"], ["discover", "Découvrir"], ["profile", "Profil"]];
+    return RE("div", { className: "stNav flex shrink-0" }, items.map((it) => RE("button", { key: it[0], onClick: () => setTab(it[0]), className: "flex-1 flex flex-col items-center gap-1 py-2.5 relative", style: { color: tab === it[0] ? "var(--accent-text)" : "var(--muted)" }, "aria-label": it[1] },
+        RE(NavIcon, { name: it[0] }),
+        RE("span", { className: "text-[11px] font-medium" }, it[1]),
+        it[0] === "stories" && dot && RE("span", { className: "absolute", style: { top: 9, left: "calc(50% + 9px)", width: 8, height: 8, borderRadius: 4, background: "var(--accent)" } }))));
+}
+function StoryRing({ unseen, has, children }) {
+    const bg = has ? (unseen ? "linear-gradient(135deg, var(--accent), #FF7A59 55%, #C850C0)" : "var(--line2)") : "transparent";
+    return RE("div", { style: { padding: 3, borderRadius: "50%", background: bg, border: has ? "none" : "1.5px dashed var(--line2)", display: "inline-flex" } },
+        RE("div", { style: { padding: 2, borderRadius: "50%", background: "var(--bg)", display: "flex" } }, children));
+}
+function TabHeader({ title, subtitle, right }) {
+    return RE("div", { className: "px-5 pt-6 pb-3 flex items-end justify-between gap-3" },
+        RE("div", { className: "min-w-0" },
+            RE("div", { className: "text-2xl font-bold tracking-tight leading-tight" }, title),
+            subtitle && RE("div", { className: "text-sm mt-0.5", style: { color: "var(--muted)" } }, subtitle)),
+        right);
+}
+function StoriesStrip({ me, feed, onOpen, onCompose }) {
+    const mine = feed ? feed.mine : [];
+    const groups = feed ? feed.groups : [];
+    return RE("div", { className: "px-5 pt-4" },
+        RE("div", { className: "flex items-end justify-between mb-3" },
+            RE("div", null,
+                RE("div", { className: "text-lg font-bold leading-tight" }, "Stories"),
+                RE("div", { className: "text-xs", style: { color: "var(--muted)" } }, "Les instants de ton cercle · 24 h")),
+            RE("button", { onClick: onCompose, className: "text-sm font-semibold", style: { color: "var(--accent-text)" } }, "+ Ta story")),
+        RE("div", { className: "flex gap-4 overflow-x-auto pb-3 stScroll" },
+            RE("div", { className: "flex flex-col items-center shrink-0", style: { width: 66 } },
+                RE("button", { onClick: () => (mine.length ? onOpen(me.id) : onCompose()), className: "relative", "aria-label": "Ta story" },
+                    RE(StoryRing, { has: mine.length > 0, unseen: false }, RE(Avatar, { code: me.id, pseudo: me.pseudo, size: 52 })),
+                    RE("span", { onClick: (e) => { e.stopPropagation(); onCompose(); }, className: "absolute flex items-center justify-center font-bold", style: { right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, background: "var(--accent)", color: "var(--on-accent)", fontSize: 14, border: "2px solid var(--bg)" } }, "+")),
+                RE("span", { className: "text-[11px] mt-1.5 truncate w-full text-center" }, "Ta story")),
+            groups.map((g) => RE("button", { key: g.uid, onClick: () => onOpen(g.uid), className: "flex flex-col items-center shrink-0", style: { width: 66 } },
+                RE(StoryRing, { has: true, unseen: g.unseen }, RE(Avatar, { code: g.uid, pseudo: g.pseudo, size: 52 })),
+                RE("span", { className: "text-[11px] mt-1.5 truncate w-full text-center", style: { color: g.unseen ? "var(--fg)" : "var(--muted)" } }, g.pseudo))),
+            !groups.length && RE("div", { className: "text-xs self-center", style: { color: "var(--muted)" } }, "Les stories de tes contacts apparaîtront ici.")));
+}
+function StoriesTab({ me, feed, onOpen, onCompose }) {
+    const cards = [];
+    if (feed && feed.mine.length)
+        cards.push({ uid: me.id, pseudo: "Ta story", items: feed.mine, unseen: false });
+    (feed ? feed.groups : []).forEach((g) => cards.push(g));
+    return RE("div", { className: "flex-1 min-h-0 flex flex-col" },
+        RE(TabHeader, { title: "Stories", subtitle: "Des instants qui disparaissent après 24 h", right: RE("button", { onClick: onCompose, className: "rounded-full px-5 py-2.5 text-sm font-semibold", style: { background: "linear-gradient(135deg, var(--accent), #FF7A59)", color: "var(--on-accent)" } }, "Ajouter") }),
+        RE("div", { className: "flex-1 overflow-y-auto px-5 pb-6" },
+            !feed && RE("div", { className: "flex justify-center pt-10", style: { color: "var(--muted)" } }, RE(Loader2, { size: 20, className: "animate-spin" })),
+            feed && !cards.length && RE("div", { className: "rounded-3xl p-8 text-center mt-4", style: { border: "1.5px dashed var(--line2)", color: "var(--muted)" } },
+                RE("div", { className: "text-4xl mb-3" }, "📸"),
+                RE("div", { className: "font-semibold mb-1", style: { color: "var(--fg)" } }, "Aucune story pour l'instant"),
+                RE("div", { className: "text-sm mb-4" }, "Partage une photo ou un petit texte : tes contacts le verront pendant 24 h."),
+                RE("button", { onClick: onCompose, className: "rounded-full px-5 py-2.5 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Créer ma story")),
+            RE("div", { className: "grid grid-cols-2 gap-3" }, cards.map((c) => {
+                const last = c.items[c.items.length - 1];
+                const isImg = last.k === "img";
+                return RE("button", { key: c.uid, onClick: () => onOpen(c.uid), className: "stCard text-left relative overflow-hidden flex flex-col justify-between", style: { borderRadius: 26, minHeight: 230, padding: 14, color: "#fff", background: isImg ? "#111" : STORY_BGS[last.bg || 0], border: c.unseen ? "2px solid var(--accent)" : "1px solid var(--line)" } },
+                    isImg && RE("img", { src: last.c, alt: "", style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", objectFit: "cover" } }),
+                    RE("div", { style: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.38), rgba(0,0,0,0.04) 45%, rgba(0,0,0,0.55))" } }),
+                    RE("div", { className: "relative flex items-center gap-2" },
+                        RE(Avatar, { code: c.uid, pseudo: c.uid === me.id ? me.pseudo : c.pseudo, size: 34 }),
+                        RE("div", { className: "text-xs font-semibold min-w-0" }, RE("div", { className: "truncate" }, c.pseudo), RE("div", { className: "opacity-80 font-normal" }, timeAgoShort(last.ts)))),
+                    RE("div", { className: "relative text-lg font-bold leading-snug", style: { textShadow: "0 1px 6px rgba(0,0,0,0.4)" } }, isImg ? (last.cap || "") : last.c.slice(0, 70)),
+                    RE("div", { className: "relative text-sm font-semibold flex items-center justify-between" }, RE("span", null, "Voir la story →"), c.items.length > 1 && RE("span", { className: "text-[11px] rounded-full px-2 py-0.5", style: { background: "rgba(0,0,0,0.45)" } }, c.items.length)));
+            }))));
+}
+function StoryComposer({ me, friends, onClose, onPosted }) {
+    const [kind, setKind] = useState("text");
+    const [text, setText] = useState("");
+    const [bg, setBg] = useState(0);
+    const [img, setImg] = useState(null);
+    const [cap, setCap] = useState("");
+    const [aud, setAud] = useState("all");
+    const [sel, setSel] = useState({});
+    const [busy, setBusy] = useState(false);
+    const [err, setErr] = useState("");
+    const fileRef = useRef(null);
+    const pick = (e) => __awaiter(this, void 0, void 0, function* () {
+        const f = e.target.files && e.target.files[0];
+        e.target.value = "";
+        if (!f)
+            return;
+        if (f.type.indexOf("image/") !== 0) {
+            setErr("Choisis une image.");
+            return;
+        }
+        try {
+            setImg(yield compressImage(f, 1080, 0.74));
+            setKind("img");
+            setErr("");
+        }
+        catch (e2) {
+            setErr("Impossible de lire cette photo.");
+        }
+    });
+    const publish = () => __awaiter(this, void 0, void 0, function* () {
+        if (kind === "text" && !text.trim()) {
+            setErr("Écris quelque chose ou choisis une photo.");
+            return;
+        }
+        if (kind === "img" && !img) {
+            setErr("Choisis une photo.");
+            return;
+        }
+        const ids = Object.keys(sel);
+        if (aud === "close" && !ids.length) {
+            setErr("Choisis au moins un ami proche.");
+            return;
+        }
+        setBusy(true);
+        const item = { id: sNewId(), ts: Date.now(), k: kind, c: kind === "text" ? text.trim().slice(0, 220) : img, bg: bg, cap: kind === "img" && cap.trim() ? cap.trim().slice(0, 120) : undefined, aud: aud === "close" ? ids : undefined };
+        const ok = yield postStory(me, item);
+        setBusy(false);
+        if (!ok) {
+            setErr("Publication impossible. Réessaie.");
+            return;
+        }
+        onPosted();
+    });
+    const chip = (on) => (on ? { background: "var(--accent)", color: "var(--on-accent)" } : { background: "var(--card2)", border: "1px solid var(--line)" });
+    return RE("div", { className: "fixed inset-0 z-[80] flex flex-col mx-auto", style: { background: "var(--bg)", color: "var(--fg)", maxWidth: 560 } },
+        RE("div", { className: "flex items-center justify-between px-4 pt-5 pb-3" },
+            RE("button", { onClick: onClose, className: "w-10 h-10 rounded-full", style: { background: "var(--card2)" }, "aria-label": "Fermer" }, "✕"),
+            RE("div", { className: "font-bold" }, "Nouvelle story"),
+            RE("button", { onClick: publish, disabled: busy, className: "rounded-full px-5 py-2 text-sm font-semibold disabled:opacity-60", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "…" : "Publier")),
+        RE("div", { className: "flex-1 min-h-0 mx-4 rounded-3xl overflow-hidden relative flex items-center justify-center", style: { background: kind === "text" ? STORY_BGS[bg] : "#000" } },
+            kind === "text" ? RE("textarea", { value: text, onChange: (e) => { setText(e.target.value); setErr(""); }, maxLength: 220, placeholder: "Écris ton instant…", className: "w-full h-full bg-transparent outline-none resize-none text-center text-white text-3xl font-bold p-8", style: { textShadow: "0 2px 10px rgba(0,0,0,0.3)" } }) : RE("img", { src: img, alt: "aperçu", style: { maxWidth: "100%", maxHeight: "100%", objectFit: "contain" } }),
+            kind === "img" && RE("input", { value: cap, onChange: (e) => setCap(e.target.value), maxLength: 120, placeholder: "Ajouter une légende…", className: "absolute left-3 right-3 bottom-3 rounded-full px-4 py-2.5 text-sm outline-none", style: { background: "rgba(0,0,0,0.55)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)" } })),
+        RE("div", { className: "px-4 pt-3 pb-4" },
+            RE("div", { className: "flex items-center gap-2 mb-3 flex-wrap" },
+                RE("button", { onClick: () => setKind("text"), className: "rounded-full px-4 py-2 text-sm font-semibold", style: chip(kind === "text") }, "Aa Texte"),
+                RE("button", { onClick: () => fileRef.current && fileRef.current.click(), className: "rounded-full px-4 py-2 text-sm font-semibold", style: chip(kind === "img") }, "📷 Photo"),
+                kind === "text" && STORY_BGS.map((b, i) => RE("button", { key: i, onClick: () => setBg(i), "aria-label": "Fond " + (i + 1), className: "w-7 h-7 rounded-full", style: { background: b, border: bg === i ? "3px solid var(--fg)" : "2px solid var(--line2)" } })),
+                RE("input", { ref: fileRef, type: "file", accept: "image/*", className: "hidden", onChange: pick })),
+            RE("div", { className: "text-[11px] uppercase tracking-widest mb-1.5", style: { color: "var(--muted)" } }, "Qui peut la voir ?"),
+            RE("div", { className: "flex gap-2 mb-2" },
+                RE("button", { onClick: () => setAud("all"), className: "rounded-full px-4 py-2 text-xs font-semibold", style: chip(aud === "all") }, "Tous mes contacts"),
+                RE("button", { onClick: () => setAud("close"), className: "rounded-full px-4 py-2 text-xs font-semibold", style: chip(aud === "close") }, "💚 Amis proches")),
+            aud === "close" && RE("div", { className: "flex gap-1.5 flex-wrap mb-1" },
+                friends.length ? friends.map((f) => RE("button", { key: f.id, onClick: () => setSel((s) => { const n = Object.assign({}, s); if (n[f.id])
+                    delete n[f.id];
+                else
+                    n[f.id] = true; return n; }), className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: chip(!!sel[f.id]) }, (sel[f.id] ? "✓ " : "") + f.pseudo)) : RE("span", { className: "text-xs", style: { color: "var(--muted)" } }, "Ajoute d'abord des contacts.")),
+            err && RE("div", { className: "text-xs mt-1", style: { color: "#FF6B5D" } }, err)));
+}
+function StoryViewer({ me, groups, start, onClose, onSeen, onDeleted, onReply }) {
+    const [gi, setGi] = useState(start || 0);
+    const [ii, setIi] = useState(0);
+    const [prog, setProg] = useState(0);
+    const [hold, setHold] = useState(false);
+    const [focus, setFocus] = useState(false);
+    const [reply, setReply] = useState("");
+    const [sent, setSent] = useState("");
+    const [vcount, setVcount] = useState(0);
+    const [vlist, setVlist] = useState(null);
+    const [confirmDel, setConfirmDel] = useState(false);
+    const downAt = useRef(0);
+    const g = groups[gi];
+    const item = g ? g.items[ii] : null;
+    const mine = !!g && g.uid === me.id;
+    const go = (dg, di) => { setGi(dg); setIi(di); setProg(0); setVlist(null); setConfirmDel(false); };
+    const next = () => { if (!g) return; if (ii < g.items.length - 1) go(gi, ii + 1); else if (gi < groups.length - 1) go(gi + 1, 0); else onClose(); };
+    const prev = () => { if (ii > 0) go(gi, ii - 1); else if (gi > 0) go(gi - 1, 0); else setProg(0); };
+    useEffect(() => { if (item) onSeen(g.uid, item); }, [gi, ii]);
+    useEffect(() => {
+        if (!item)
+            return;
+        const t = setInterval(() => { if (hold || focus || vlist || confirmDel)
+            return; setProg((p) => p + 0.01); }, 50);
+        return () => clearInterval(t);
+    }, [gi, ii, hold, focus, vlist, confirmDel]);
+    useEffect(() => { if (prog >= 1) next(); }, [prog]);
+    useEffect(() => {
+        setVcount(0);
+        if (!mine || !item)
+            return;
+        let alive = true;
+        safeList("sv:" + item.id + ":").then((ks) => { if (alive) setVcount(ks.length); });
+        return () => { alive = false; };
+    }, [gi, ii]);
+    const openViews = () => __awaiter(this, void 0, void 0, function* () {
+        const pre = "sv:" + item.id + ":";
+        const ks = yield safeList(pre);
+        const rows = yield Promise.all(ks.map((k) => __awaiter(this, void 0, void 0, function* () {
+            const uid = k.slice(pre.length);
+            const t = yield safeGet(k, true);
+            const pr = parseObj(yield safeGet("profile:" + uid, true));
+            return { uid: uid, pseudo: pr.pseudo || "?", ts: parseInt(t, 10) || 0 };
+        })));
+        rows.sort((a, b) => b.ts - a.ts);
+        setVlist(rows);
+    });
+    const del = () => __awaiter(this, void 0, void 0, function* () {
+        yield removeStory(me, item.id);
+        onDeleted();
+        onClose();
+    });
+    const sendReply = (txt) => __awaiter(this, void 0, void 0, function* () {
+        const t = (txt || reply).trim();
+        if (!t)
+            return;
+        setReply("");
+        yield onReply(g.uid, g.pseudo, t);
+        setSent("Envoyé ✓");
+        setTimeout(() => setSent(""), 1600);
+    });
+    if (!g || !item)
+        return null;
+    const zone = (fn, w, label) => RE("button", { onPointerDown: () => { downAt.current = Date.now(); setHold(true); }, onPointerUp: () => setHold(false), onPointerLeave: () => setHold(false), onClick: () => { if (Date.now() - downAt.current > 350)
+            return; fn(); }, className: "h-full", style: { width: w }, "aria-label": label });
+    return RE("div", { className: "fixed inset-0 z-[90]", style: { background: "#000" } },
+        RE("div", { className: "h-full mx-auto relative flex items-center justify-center overflow-hidden", style: { maxWidth: 480 } },
+            item.k === "img" ? RE("div", { className: "w-full h-full flex items-center justify-center" },
+                RE("img", { src: item.c, alt: "story", style: { maxWidth: "100%", maxHeight: "100%", objectFit: "contain" } }),
+                item.cap && RE("div", { className: "absolute left-0 right-0 px-6 text-center text-white text-lg font-semibold", style: { bottom: mine ? 90 : 150, textShadow: "0 2px 8px rgba(0,0,0,0.7)" } }, item.cap)) : RE("div", { className: "w-full h-full flex items-center justify-center p-8 text-center text-white text-3xl font-bold leading-snug", style: { background: STORY_BGS[item.bg || 0], textShadow: "0 2px 10px rgba(0,0,0,0.3)", wordBreak: "break-word" } }, item.c),
+            RE("div", { className: "absolute left-3 right-3 flex gap-1", style: { top: 10 } }, g.items.map((it, k) => RE("div", { key: it.id, className: "flex-1 rounded-full overflow-hidden", style: { height: 3, background: "rgba(255,255,255,0.3)" } },
+                RE("div", { style: { height: "100%", background: "#fff", width: (k < ii ? 100 : k === ii ? Math.min(100, prog * 100) : 0) + "%" } })))),
+            RE("div", { className: "absolute left-3 right-3 flex items-center gap-3", style: { top: 24 } },
+                RE(Avatar, { code: g.uid, pseudo: mine ? me.pseudo : g.pseudo, size: 36 }),
+                RE("div", { className: "flex-1 min-w-0 text-white" },
+                    RE("div", { className: "text-sm font-semibold truncate" }, mine ? "Ta story" : g.pseudo),
+                    RE("div", { className: "text-[11px] opacity-75" }, timeAgoShort(item.ts) + (item.aud ? " · 💚 Amis proches" : ""))),
+                RE("button", { onClick: onClose, className: "w-9 h-9 rounded-full text-white", style: { background: "rgba(255,255,255,0.18)" }, "aria-label": "Fermer" }, "✕")),
+            RE("div", { className: "absolute left-0 right-0 flex", style: { top: 70, bottom: mine ? 70 : 140 } }, zone(prev, "35%", "Précédent"), zone(next, "65%", "Suivant")),
+            mine ? RE("div", { className: "absolute left-0 right-0 bottom-0 px-4 pb-4 pt-6 flex items-center justify-between", style: { background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)" } },
+                RE("button", { onClick: openViews, className: "rounded-full px-4 py-2 text-sm font-semibold text-white", style: { background: "rgba(255,255,255,0.16)" } }, "👁️ " + vcount + (vcount > 1 ? " vues" : " vue")),
+                confirmDel ? RE("div", { className: "flex gap-2" },
+                    RE("button", { onClick: () => setConfirmDel(false), className: "rounded-full px-4 py-2 text-sm text-white", style: { background: "rgba(255,255,255,0.16)" } }, "Annuler"),
+                    RE("button", { onClick: del, className: "rounded-full px-4 py-2 text-sm font-semibold", style: { background: "#FF6B5D", color: "#0F1115" } }, "Supprimer")) : RE("button", { onClick: () => setConfirmDel(true), className: "rounded-full px-4 py-2 text-sm font-semibold text-white", style: { background: "rgba(255,255,255,0.16)" } }, "🗑️ Supprimer")) : RE("div", { className: "absolute left-0 right-0 bottom-0 px-3 pb-4 pt-8", style: { background: "linear-gradient(to top, rgba(0,0,0,0.75), transparent)" } },
+                RE("div", { className: "flex justify-center gap-2 mb-2.5" }, ["❤️", "😂", "😮", "😢", "🔥", "👏"].map((e) => RE("button", { key: e, onClick: () => sendReply(e + " (à ta story)"), className: "w-10 h-10 rounded-full text-xl", style: { background: "rgba(255,255,255,0.14)" } }, e))),
+                RE("div", { className: "flex gap-2" },
+                    RE("input", { value: reply, onChange: (e) => setReply(e.target.value), onFocus: () => setFocus(true), onBlur: () => setFocus(false), onKeyDown: (e) => { if (e.key === "Enter")
+                            sendReply(); }, placeholder: "Répondre à " + g.pseudo + "…", className: "flex-1 rounded-full px-4 py-2.5 text-sm outline-none", style: { background: "rgba(255,255,255,0.14)", color: "#fff", border: "1px solid rgba(255,255,255,0.25)" } }),
+                    RE("button", { onClick: () => sendReply(), className: "rounded-full px-4 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Envoyer")),
+                sent && RE("div", { className: "text-center text-xs text-white mt-2" }, sent)),
+            vlist && RE("div", { className: "absolute inset-0 z-10 flex items-end", style: { background: "rgba(0,0,0,0.55)" }, onClick: () => setVlist(null) },
+                RE("div", { className: "w-full rounded-t-3xl p-5", style: { background: "var(--bg)", color: "var(--fg)", maxHeight: "60%", overflowY: "auto" }, onClick: (e) => e.stopPropagation() },
+                    RE("div", { className: "font-bold mb-3" }, "Vues (" + vlist.length + ")"),
+                    vlist.length ? vlist.map((v) => RE("div", { key: v.uid, className: "flex items-center gap-3 py-1.5" },
+                        RE(Avatar, { code: v.uid, pseudo: v.pseudo, size: 34 }),
+                        RE("div", { className: "flex-1 text-sm truncate" }, v.pseudo),
+                        RE("div", { className: "text-xs", style: { color: "var(--muted)" } }, timeAgoShort(v.ts)))) : RE("div", { className: "text-sm", style: { color: "var(--muted)" } }, "Personne n'a encore vu cette story.")))));
+}
+function OnceBubble({ m, mine, onOpen }) {
+    if (m.viewed || !m.content)
+        return RE("div", { className: "flex items-center gap-2 text-sm italic opacity-70" }, RE("span", null, "📷"), RE("span", null, "Photo ouverte"));
+    if (mine)
+        return RE("div", { className: "flex items-center gap-2 text-sm" }, RE("span", { className: "text-lg" }, "👁️"), RE("span", null, "Photo à vue unique · envoyée"));
+    return RE("button", { onClick: (e) => { e.stopPropagation(); onOpen(); }, className: "flex items-center gap-3 text-left", style: { minWidth: 200 } },
+        RE("span", { className: "w-11 h-11 rounded-full flex items-center justify-center text-xl shrink-0", style: { background: "rgba(0,0,0,0.18)" } }, "👁️"),
+        RE("span", null, RE("span", { className: "block text-sm font-semibold" }, "Photo à vue unique"), RE("span", { className: "block text-[11px] opacity-70" }, "Touche pour ouvrir · une seule fois")));
+}
+function OnceViewer({ m, onClose }) {
+    const [left, setLeft] = useState(15);
+    useEffect(() => { const t = setInterval(() => setLeft((x) => x - 1), 1000); return () => clearInterval(t); }, []);
+    useEffect(() => { if (left <= 0) onClose(); }, [left]);
+    return RE("div", { className: "fixed inset-0 z-[95] flex flex-col items-center justify-center", style: { background: "rgba(0,0,0,0.97)" }, onClick: onClose },
+        RE("div", { className: "absolute left-0 right-0 text-center text-xs", style: { top: 22, color: "#fff", opacity: 0.8 } }, "👁️ Vue unique · se ferme dans " + left + " s"),
+        RE("img", { src: m.content, alt: "", style: { maxWidth: "100%", maxHeight: "80%", objectFit: "contain" } }),
+        m.cap && RE("div", { className: "mt-4 px-6 text-center text-white" }, m.cap),
+        RE("button", { onClick: onClose, className: "absolute top-4 right-4 w-10 h-10 rounded-full text-white", style: { background: "rgba(255,255,255,0.16)" }, "aria-label": "Fermer" }, "✕"));
+}
+function MyCodeSheet({ me, onClose, onDone, onProfileUpdate }) {
+    const [v, setV] = useState(me.code || "");
+    const [err, setErr] = useState("");
+    const [busy, setBusy] = useState(false);
+    const clean = (x) => x.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const save = () => __awaiter(this, void 0, void 0, function* () {
+        const nc = clean(v);
+        if (nc.length < 3 || nc.length > 12) {
+            setErr("3 à 12 lettres ou chiffres, sans espace ni accent.");
+            return;
+        }
+        if (nc === me.code) {
+            onClose();
+            return;
+        }
+        if (nc === ADMIN_CODE || nc === "ADMIN") {
+            setErr("Ce code est réservé.");
+            return;
+        }
+        setBusy(true);
+        setErr("");
+        const p = parseObj(yield safeGet("profile:" + me.id, true));
+        const wait = (p.codeAt || 0) + 3600000 - Date.now();
+        if (wait > 0) {
+            setErr("Tu pourras le modifier de nouveau dans " + Math.ceil(wait / 60000) + " min.");
+            setBusy(false);
+            return;
+        }
+        const taken = (yield safeGet("account:" + nc, true)) || (yield safeGet("codeIndex:" + nc, true));
+        if (taken) {
+            setErr("Ce code est déjà utilisé, essaie-en un autre.");
+            setBusy(false);
+            return;
+        }
+        const rawAcc = yield safeGet("account:" + me.code, true);
+        if (!rawAcc) {
+            setErr("Compte introuvable. Reconnecte-toi puis réessaie.");
+            setBusy(false);
+            return;
+        }
+        yield safeSet("codeIndex:" + nc, me.id, true);
+        const check = yield safeGet("codeIndex:" + nc, true);
+        if (check !== me.id) {
+            setErr("Ce code vient d'être pris, essaie-en un autre.");
+            setBusy(false);
+            return;
+        }
+        yield safeSet("account:" + nc, rawAcc, true);
+        yield safeSet("profile:" + me.id, JSON.stringify(Object.assign({}, p, { code: nc, codeAt: Date.now() })), true);
+        yield safeDelete("account:" + me.code, true);
+        yield safeDelete("codeIndex:" + me.code, true);
+        const updated = Object.assign({}, me, { code: nc });
+        yield safeSet("profile", JSON.stringify(updated), false);
+        setBusy(false);
+        onProfileUpdate(updated);
+        onDone("Ton code ami est maintenant " + nc + " ✓");
+    });
+    return RE(Sheet, { title: "✏️ Mon code ami", onClose: onClose },
+        RE("p", { className: "text-xs mb-3", style: { color: "var(--muted)" } }, "Choisis un code facile à retenir (ton prénom, un surnom…). Tes contacts n'ont rien à refaire. Pour te reconnecter, il faudra utiliser le nouveau code avec le même mot de passe."),
+        RE("input", { value: v, maxLength: 12, onChange: (e) => { setV(clean(e.target.value)); setErr(""); }, "aria-label": "Nouveau code ami", className: "w-full rounded-xl px-4 py-3 text-center text-xl font-bold tracking-widest outline-none mb-2", style: { background: "var(--card)", color: "var(--fg)", border: "1px solid var(--line)" } }),
+        RE("div", { className: "text-[11px] mb-3 text-center", style: { color: "var(--muted)" } }, "3 à 12 lettres ou chiffres · modifiable une fois par heure"),
+        err && RE("div", { className: "text-xs mb-2", style: { color: "#FF6B5D" } }, err),
+        RE("div", { className: "flex gap-2" },
+            RE("button", { onClick: () => { setV(generateCodeCandidate(6)); setErr(""); }, className: "rounded-xl px-4 py-3 text-sm font-semibold", style: { background: "var(--card2)", border: "1px solid var(--line)" } }, "🎲 Au hasard"),
+            RE("button", { onClick: save, disabled: busy, className: "flex-1 rounded-xl py-3 text-sm font-semibold disabled:opacity-60", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "Enregistrement…" : "Enregistrer")));
+}
+function DiscoverTab({ me, prefs, onOpenChat, goProfile, flash }) {
+    const [q, setQ] = useState("");
+    const [dir, setDir] = useState(null);
+    const [mine, setMine] = useState([]);
+    const [hit, setHit] = useState(null);
+    const blocked = prefs.blocked || [];
+    const load = () => __awaiter(this, void 0, void 0, function* () {
+        const keys = yield safeList("disc:");
+        const friends = yield getFriendIds(me);
+        const ids = keys.map((k) => k.slice(5)).filter((id) => id !== me.id && blocked.indexOf(id) === -1);
+        const rows = yield Promise.all(ids.map((id) => __awaiter(this, void 0, void 0, function* () {
+            const raw = yield safeGet("profile:" + id, true);
+            if (!raw)
+                return null;
+            const p = parseObj(raw);
+            if (p.avatar)
+                AVATARS[id] = p.avatar;
+            return { id: id, pseudo: p.pseudo || "?", bio: p.bio || "", code: p.code || "" };
+        })));
+        setDir(rows.filter(Boolean));
+        setMine(friends);
+    });
+    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        const code = extractCode(q);
+        if (code.length < 3) {
+            setHit(null);
+            return;
+        }
+        let alive = true;
+        const t = setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+            const id = yield safeGet("codeIndex:" + code, true);
+            if (!alive || !id || id === me.id || blocked.indexOf(id) !== -1) {
+                if (alive)
+                    setHit(null);
+                return;
+            }
+            const p = parseObj(yield safeGet("profile:" + id, true));
+            if (p.avatar)
+                AVATARS[id] = p.avatar;
+            if (alive)
+                setHit({ id: id, pseudo: p.pseudo || "?", bio: p.bio || "", code: code });
+        }), 350);
+        return () => { alive = false; clearTimeout(t); };
+    }, [q]);
+    const addTo = (p, open) => __awaiter(this, void 0, void 0, function* () {
+        const list = parseList(yield safeGet("contacts:" + me.id, false));
+        if (list.indexOf(p.id) === -1)
+            yield safeSet("contacts:" + me.id, JSON.stringify(list.concat([p.id])), false);
+        setMine((m) => (m.indexOf(p.id) === -1 ? m.concat([p.id]) : m));
+        if (open)
+            onOpenChat({ id: p.id, pseudo: p.pseudo });
+        else
+            flash(p.pseudo + " ajouté(e) à tes contacts ✓");
+    });
+    const card = (p) => RE("div", { key: p.id, className: "rounded-3xl p-4 flex flex-col items-center text-center", style: { background: "var(--card)", border: "1px solid var(--line)" } },
+        RE(StoryRing, { has: true, unseen: true }, RE(Avatar, { code: p.id, pseudo: p.pseudo, size: 64 })),
+        RE("div", { className: "font-bold mt-2 truncate w-full" }, p.pseudo),
+        p.code && RE("div", { className: "text-xs", style: { color: "var(--muted)" } }, "@" + p.code),
+        RE("div", { className: "text-xs mt-1 mb-3", style: { color: "var(--muted)", minHeight: 32 } }, p.bio ? p.bio.slice(0, 60) : ""),
+        mine.indexOf(p.id) !== -1 ? RE("div", { className: "text-xs font-semibold mb-2", style: { color: "var(--accent-text)" } }, "✓ Dans tes contacts") : RE("button", { onClick: () => addTo(p, false), className: "rounded-full px-4 py-1.5 text-xs font-semibold mb-2", style: { background: "var(--card2)", border: "1px solid var(--line)" } }, "+ Ajouter"),
+        RE("button", { onClick: () => addTo(p, true), className: "rounded-full px-5 py-1.5 text-xs font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Message"));
+    const shown = (dir || []).filter((p) => !hit || p.id !== hit.id).filter((p) => !q.trim() || p.pseudo.toLowerCase().indexOf(q.trim().toLowerCase()) !== -1 || (extractCode(q).length >= 3 && p.code === extractCode(q)));
+    return RE("div", { className: "flex-1 min-h-0 flex flex-col" },
+        RE(TabHeader, { title: "Découvrir", subtitle: "Retrouve tes proches et de nouveaux profils" }),
+        RE("div", { className: "px-5 pb-3" },
+            RE("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "Rechercher un pseudo ou un code ami…", "aria-label": "Rechercher", className: "w-full rounded-full px-5 py-3 text-sm outline-none", style: { background: "var(--card)", color: "var(--fg)", border: "1px solid var(--line)" } })),
+        RE("div", { className: "flex-1 overflow-y-auto px-5 pb-6" },
+            hit && RE("div", { className: "mb-3" },
+                RE("div", { className: "text-[11px] uppercase tracking-widest mb-2", style: { color: "var(--muted)" } }, "Trouvé avec ce code"),
+                RE("div", { className: "grid grid-cols-2 gap-3" }, card(hit))),
+            !dir && RE("div", { className: "flex justify-center pt-8", style: { color: "var(--muted)" } }, RE(Loader2, { size: 20, className: "animate-spin" })),
+            dir && !hit && !q.trim() && RE("div", { className: "text-[11px] uppercase tracking-widest mb-2", style: { color: "var(--muted)" } }, "Profils à découvrir"),
+            dir && RE("div", { className: "grid grid-cols-2 gap-3" }, shown.map(card)),
+            dir && !shown.length && !hit && RE("div", { className: "rounded-3xl p-6 text-center text-sm mt-2", style: { border: "1.5px dashed var(--line2)", color: "var(--muted)" } },
+                q.trim() ? "Aucun profil visible pour cette recherche. Si tu connais son code ami, tape-le en entier." : "Personne n'a encore activé « Apparaître dans Découvrir ». Tu peux le faire depuis ton profil.",
+                !q.trim() && RE("div", null, RE("button", { onClick: goProfile, className: "mt-3 rounded-full px-5 py-2 text-xs font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Aller à mon profil")))));
+}
+function ProfileTab({ me, onProfileUpdate, onSettings, onEditCode, flash }) {
+    const [pseudo, setPseudo] = useState(me.pseudo);
+    const [bio, setBio] = useState("");
+    const [disc, setDisc] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [copied, setCopied] = useState(false);
+    useEffect(() => {
+        let alive = true;
+        (() => __awaiter(this, void 0, void 0, function* () {
+            const p = parseObj(yield safeGet("profile:" + me.id, true));
+            const d = yield safeGet("disc:" + me.id, true);
+            if (alive) {
+                setBio(p.bio || "");
+                setDisc(!!d);
+            }
+        }))();
+        return () => { alive = false; };
+    }, [me.id]);
+    const save = () => __awaiter(this, void 0, void 0, function* () {
+        const clean = pseudo.trim();
+        if (clean.length < 2) {
+            flash("Pseudo trop court (2 caractères minimum).");
+            return;
+        }
+        if (!me.admin && isReservedPseudo(clean)) {
+            flash("Ce pseudo est réservé.");
+            return;
+        }
+        setBusy(true);
+        const p = parseObj(yield safeGet("profile:" + me.id, true));
+        yield safeSet("profile:" + me.id, JSON.stringify(Object.assign({}, p, { pseudo: clean, bio: bio.trim().slice(0, 140) })), true);
+        if (clean !== me.pseudo) {
+            const rawAcc = yield safeGet("account:" + me.code, true);
+            if (rawAcc) {
+                const acc = JSON.parse(rawAcc);
+                acc.pseudo = clean;
+                yield safeSet("account:" + me.code, JSON.stringify(acc), true);
+            }
+            const updated = Object.assign({}, me, { pseudo: clean });
+            yield safeSet("profile", JSON.stringify(updated), false);
+            onProfileUpdate(updated);
+        }
+        if (disc)
+            yield safeSet("disc:" + me.id, "1", true);
+        else
+            yield safeDelete("disc:" + me.id, true);
+        setBusy(false);
+        flash("Profil enregistré ✓");
+    });
+    const copy = () => __awaiter(this, void 0, void 0, function* () {
+        const ok = yield copyToClipboard(me.code);
+        setCopied(ok);
+        setTimeout(() => setCopied(false), 1500);
+    });
+    const share = () => __awaiter(this, void 0, void 0, function* () {
+        const text = "Ajoute-moi sur Sans-Trace avec mon code ami : " + me.code;
+        try {
+            if (navigator.share) {
+                yield navigator.share({ title: "Sans-Trace", text: text });
+                return;
+            }
+        }
+        catch (e) {
+            return;
+        }
+        const ok = yield copyToClipboard(text);
+        flash(ok ? "Message d'invitation copié ✓" : "Copie impossible");
+    });
+    const lab = "text-sm font-semibold mb-1.5 mt-4";
+    const fld = { background: "var(--bg)", color: "var(--fg)", border: "1px solid var(--line)" };
+    return RE("div", { className: "flex-1 min-h-0 overflow-y-auto px-5 pt-6 pb-6" },
+        RE("div", { className: "rounded-3xl p-5", style: { background: "var(--card)", border: "1px solid var(--line)" } },
+            RE("div", { className: "flex items-center gap-4 pb-4", style: { borderBottom: "1px solid var(--line)" } },
+                RE("button", { onClick: onSettings, "aria-label": "Modifier mon avatar" }, RE(StoryRing, { has: true, unseen: true }, RE(Avatar, { code: me.id, pseudo: me.pseudo, size: 78 }))),
+                RE("div", { className: "min-w-0" },
+                    RE("div", { className: "text-2xl font-bold truncate" }, me.pseudo),
+                    RE("div", { className: "text-sm", style: { color: "var(--muted)" } }, "@" + me.code))),
+            RE("div", { className: lab }, "Nom affiché"),
+            RE("input", { value: pseudo, maxLength: 24, onChange: (e) => setPseudo(e.target.value), className: "w-full rounded-2xl px-4 py-3 text-sm outline-none", style: fld }),
+            RE("div", { className: lab }, "Bio"),
+            RE("textarea", { value: bio, maxLength: 140, onChange: (e) => setBio(e.target.value), placeholder: "Quelques mots sur toi…", rows: 3, className: "w-full rounded-2xl px-4 py-3 text-sm outline-none resize-none", style: fld }),
+            RE("div", { className: lab }, "Mon code ami"),
+            RE("div", { className: "flex items-center gap-2 rounded-2xl px-4 py-2.5", style: fld },
+                RE("span", { className: "font-mono font-bold text-lg flex-1", style: { color: "var(--accent-text)", letterSpacing: "0.15em" } }, me.code),
+                RE("button", { onClick: copy, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: "var(--card2)" } }, copied ? "Copié ✓" : "Copier"),
+                !me.admin && RE("button", { onClick: onEditCode, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "✏️ Modifier")),
+            RE("button", { onClick: () => setDisc((d) => !d), className: "w-full mt-4 rounded-2xl px-4 py-3 flex items-center gap-3 text-left", style: fld, "aria-pressed": disc },
+                RE("div", { className: "flex-1" }, RE("div", { className: "text-sm font-semibold" }, "Apparaître dans Découvrir"), RE("div", { className: "text-[11px]", style: { color: "var(--muted)" } }, disc ? "Les autres peuvent voir ton pseudo, ta bio et t'ajouter." : "Désactivé : on ne peut te trouver qu'avec ton code ami.")),
+                RE("span", { className: "shrink-0 rounded-full relative", style: { width: 46, height: 26, background: disc ? "var(--accent)" : "var(--line2)", transition: "background .2s" } }, RE("span", { className: "absolute rounded-full", style: { top: 3, left: disc ? 23 : 3, width: 20, height: 20, background: "#fff", transition: "left .2s" } }))),
+            RE("div", { className: "flex gap-2 flex-wrap mt-5" },
+                RE("button", { onClick: save, disabled: busy, className: "rounded-full px-6 py-3 text-sm font-semibold disabled:opacity-60", style: { background: "linear-gradient(135deg, var(--accent), #FF7A59)", color: "var(--on-accent)" } }, busy ? "Enregistrement…" : "Enregistrer"),
+                RE("button", { onClick: share, className: "rounded-full px-5 py-3 text-sm font-semibold", style: { background: "var(--card2)", border: "1px solid var(--line)" } }, "Partager mon code"),
+                RE("button", { onClick: onSettings, className: "rounded-full px-5 py-3 text-sm font-semibold", style: { background: "var(--card2)", border: "1px solid var(--line)" } }, "⚙️ Réglages"))));
+}
+function Home(props) {
+    const me = props.me;
+    const prefs = props.prefs;
+    const [tab, setTab] = useState("msgs");
+    const [feed, setFeed] = useState(null);
+    const [viewer, setViewer] = useState(null);
+    const [composer, setComposer] = useState(false);
+    const [codeSheet, setCodeSheet] = useState(false);
+    const [toast, setToast] = useState("");
+    const blocked = prefs.blocked || [];
+    const bKey = blocked.join(",");
+    const loadF = useCallback(() => loadFeed(me, blocked).then(setFeed).catch(() => { }), [me.id, bKey]);
+    useEffect(() => {
+        loadF();
+        const t = setInterval(() => { if (!document.hidden)
+            loadF(); }, 20000);
+        return () => clearInterval(t);
+    }, [loadF]);
+    const flash = (m) => { setToast(m); setTimeout(() => setToast(""), 2400); };
+    const buildGroups = () => {
+        const gs = [];
+        if (feed && feed.mine.length)
+            gs.push({ uid: me.id, pseudo: "Ta story", items: feed.mine });
+        return gs.concat(feed ? feed.groups : []);
+    };
+    const openStories = (uid) => {
+        const gs = buildGroups();
+        const idx = gs.findIndex((g) => g.uid === uid);
+        if (idx < 0) {
+            if (uid === me.id)
+                setComposer(true);
+            return;
+        }
+        setViewer({ groups: gs, start: idx });
+    };
+    const reply = (uid, pseudo, text) => __awaiter(this, void 0, void 0, function* () {
+        const msg = { id: Date.now() + "-" + Math.random(), from: me.id, type: "text", content: "↩️ Story · " + text, ts: Date.now() };
+        yield appendMessage(me, { id: uid, pseudo: pseudo }, msg);
+        yield ensureInbox(me.id, uid);
+    });
+    const compose = () => setComposer(true);
+    const bodyStyle = { background: "radial-gradient(120% 70% at 50% -10%, var(--glow) 0%, var(--bg) 60%)", color: "var(--fg)" };
+    let body;
+    if (tab === "msgs")
+        body = RE(HomeMsgs, Object.assign({}, props, { top: RE(StoriesStrip, { me: me, feed: feed, onOpen: openStories, onCompose: compose }), onEditCode: () => setCodeSheet(true) }));
+    else
+        body = RE("div", { className: "h-full flex flex-col", style: bodyStyle }, tab === "stories" ? RE(StoriesTab, { me: me, feed: feed, onOpen: openStories, onCompose: compose }) : tab === "discover" ? RE(DiscoverTab, { me: me, prefs: prefs, onOpenChat: props.onOpenChat, goProfile: () => setTab("profile"), flash: flash }) : RE(ProfileTab, { me: me, onProfileUpdate: props.onProfileUpdate, onSettings: props.onSettings, onEditCode: () => setCodeSheet(true), flash: flash }));
+    return RE("div", { className: "h-full flex flex-col", style: { background: "var(--bg)", color: "var(--fg)" } },
+        RE("div", { className: "flex-1 min-h-0 relative" }, RE("div", { className: "absolute inset-0 flex flex-col" }, body)),
+        RE(BottomNav, { tab: tab, setTab: setTab, dot: !!(feed && feed.groups.some((g) => g.unseen)) }),
+        viewer && RE(StoryViewer, { me: me, groups: viewer.groups, start: viewer.start, onClose: () => { setViewer(null); loadF(); }, onSeen: (uid, item) => { markStorySeen(me, uid, item); }, onDeleted: () => { flash("Story supprimée"); loadF(); }, onReply: reply }),
+        composer && RE(StoryComposer, { me: me, friends: feed ? feed.friends : [], onClose: () => setComposer(false), onPosted: () => { setComposer(false); flash("Story publiée ✓"); loadF(); } }),
+        codeSheet && RE(MyCodeSheet, { me: me, onClose: () => setCodeSheet(false), onDone: (m) => { setCodeSheet(false); flash(m); }, onProfileUpdate: props.onProfileUpdate }),
+        toast && RE("div", { className: "fixed left-1/2 z-[120] px-4 py-2 rounded-full text-sm", style: { bottom: 96, transform: "translateX(-50%)", background: "var(--card2)", border: "1px solid var(--line2)", color: "var(--fg)" }, role: "status" }, toast));
+}
+function HomeMsgs({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs, onPrefs, top, onEditCode }) {
     const [contacts, setContacts] = useState([]);
     const [adding, setAdding] = useState(false);
     const [q, setQ] = useState("");
@@ -2956,6 +3668,7 @@ function Home({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs, on
                 safeGet("profile:" + id, true),
                 safeGet("last:" + cid, true),
                 safeGet("unread:" + cid + ":" + me.id, true),
+                safeGet("streak:" + cid, true),
             ]);
             const pr = r[0] ? JSON.parse(r[0]) : null;
             if (!pr)
@@ -2964,7 +3677,7 @@ function Home({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs, on
                 AVATARS[id] = pr.avatar;
             else
                 delete AVATARS[id];
-            return { id: id, pseudo: pr.pseudo, avatar: pr.avatar || null, last: r[1] ? JSON.parse(yield decLastRaw(r[1], me.id, id)) : null, unread: parseInt(r[2], 10) || 0 };
+            return { id: id, pseudo: pr.pseudo, avatar: pr.avatar || null, last: r[1] ? JSON.parse(yield decLastRaw(r[1], me.id, id)) : null, unread: parseInt(r[2], 10) || 0, streak: streakInfo(parseObj(r[3])) };
         })));
         const gRaw = yield safeGet("groups:" + me.id, true);
         const gids = gRaw ? JSON.parse(gRaw) : [];
@@ -3092,6 +3805,7 @@ function Home({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs, on
                     React.createElement(Key, { size: 13, style: { color: "var(--muted)" } }),
                     React.createElement("span", { className: "font-mono font-semibold", style: { letterSpacing: "0.1em", color: "var(--accent-text)" } }, me.code),
                     React.createElement("button", { onClick: copyMyCode, className: "w-6 h-6 rounded-full flex items-center justify-center" }, copied ? React.createElement(Check, { size: 12 }) : React.createElement(Copy, { size: 12 }))),
+                !me.admin && onEditCode && React.createElement("button", { onClick: onEditCode, className: "w-7 h-7 rounded-full flex items-center justify-center text-xs", style: { background: "var(--card)", border: "1px solid var(--line)" }, title: "Choisir mon code ami", "aria-label": "Modifier mon code ami" }, "✏️"),
                 React.createElement("button", { onClick: () => setConfirmRegen((c) => !c), className: "w-7 h-7 rounded-full flex items-center justify-center", style: { background: "var(--card)", border: "1px solid var(--line)", color: "var(--muted)" }, title: "R\u00E9g\u00E9n\u00E9rer mon code" },
                     React.createElement(RefreshCw, { size: 12 }))),
             confirmRegen && (React.createElement("div", { className: "mt-2 rounded-lg px-3 py-2 text-xs", style: { background: "var(--card)", border: "1px solid var(--line)" } },
@@ -3128,6 +3842,7 @@ function Home({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs, on
                 React.createElement("span", { style: { color: "var(--muted)" } }, "Ic\u00F4ne, plein \u00E9cran, d\u00E9marrage rapide")),
             React.createElement("button", { onClick: inst.install, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Installer"),
             React.createElement("button", { onClick: () => setInstHide(true), className: "text-xs", style: { color: "var(--muted)" } }, "\u2715"))),
+        top,
         contacts.length > 3 && (React.createElement("div", { className: "px-4 pt-3" },
             React.createElement("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "Rechercher une conversation", className: "w-full rounded-full px-4 py-2.5 text-sm outline-none", style: { background: "var(--card)", color: "var(--fg)", border: "1px solid var(--line)" } }))),
         React.createElement("div", { className: "flex-1 overflow-y-auto pt-1" },
@@ -3142,7 +3857,8 @@ function Home({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs, on
                         React.createElement("span", { className: "truncate " + (c.unread > 0 ? "font-bold" : "font-medium") },
                             pinnedIds.indexOf(c.id) !== -1 ? "📌 " : "",
                             c.pseudo,
-                            mutedIds.indexOf(c.id) !== -1 ? " 🔇" : ""),
+                            mutedIds.indexOf(c.id) !== -1 ? " 🔇" : "",
+                            c.streak ? " 🔥" + c.streak.n + (c.streak.risk ? "⏳" : "") : ""),
                         React.createElement("span", { className: "text-[11px] shrink-0", style: { color: "var(--muted)" } }, c.last ? fmtTime(c.last.ts) : "")),
                     React.createElement("div", { className: "flex items-center justify-between gap-2" },
                         React.createElement("span", { className: "text-sm truncate", style: { color: "var(--muted)" } }, c.last ? (c.last.from === me.id ? "Toi : " : "") + c.last.preview : "Nouvelle conversation"),
@@ -3191,7 +3907,7 @@ function previewOf(m) {
     if (m.type === "text")
         return m.content.slice(0, 60);
     if (m.type === "image")
-        return m.cap ? "📷 " + String(m.cap).slice(0, 40) : "📷 Photo";
+        return m.once ? "👁️ Photo à vue unique" : m.cap ? "📷 " + String(m.cap).slice(0, 40) : "📷 Photo";
     if (m.type === "file")
         return "📎 " + m.name;
     if (m.type === "audio")
@@ -3262,6 +3978,8 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
     const [pinId, setPinId] = useState("");
     const [pendingImg, setPendingImg] = useState(null);
     const [gSusp, setGSusp] = useState(null);
+    const [onceMode, setOnceMode] = useState(false);
+    const [onceView, setOnceView] = useState(null);
     const gSuspRef = useRef(null);
     gSuspRef.current = gSusp;
     useEffect(() => {
@@ -3465,6 +4183,8 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
             flashNotice(gSuspRef.current.gone ? "Ce groupe a été supprimé." : "Ce groupe est suspendu par l'administrateur.");
             return;
         }
+        if (!other.isGroup && msg0.type !== "system" && msg0.type !== "calllog" && navigator.onLine)
+            bumpStreak(me.id, other.id);
         const msg = ttl ? Object.assign({}, msg0, { exp: msg0.ts + ttl * 1000 }) : msg0;
         if (!navigator.onLine) {
             queueOutbox(me.id, { id: other.id, pseudo: other.pseudo, isGroup: !!other.isGroup, members: gmembers }, msg);
@@ -3634,9 +4354,10 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
             for (let ii = 0; ii < imgs.length; ii++) {
                 if (imgs.length > 1)
                     setNotice("Envoi de la photo " + (ii + 1) + " / " + imgs.length + "…");
-                yield pushMessage({ id: newId(), from: me.id, type: "image", content: imgs[ii], cap: ii === 0 ? (clean || undefined) : undefined, ts: tBase + ii, replyTo: ii === 0 ? rt0 : undefined });
+                yield pushMessage({ id: newId(), from: me.id, type: "image", content: imgs[ii], cap: ii === 0 ? (clean || undefined) : undefined, ts: tBase + ii, replyTo: ii === 0 ? rt0 : undefined, once: onceMode ? true : undefined });
             }
             setNotice("");
+            setOnceMode(false);
             setSending(false);
             return;
         }
@@ -3981,7 +4702,7 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
                             nameOf(m.replyTo.from),
                             " : ",
                             m.replyTo.preview)),
-                        m.deleted ? (React.createElement("div", { className: "text-sm italic opacity-70" }, "\uD83D\uDEAB Message supprim\u00E9")) : m.type === "text" ? (React.createElement("div", { className: "whitespace-pre-wrap break-words", style: { fontSize: "var(--fs)" } }, linkify(m.content))) : m.type === "image" ? (React.createElement("div", null,
+                        m.deleted ? (React.createElement("div", { className: "text-sm italic opacity-70" }, "\uD83D\uDEAB Message supprim\u00E9")) : m.type === "text" ? (React.createElement("div", { className: "whitespace-pre-wrap break-words", style: { fontSize: "var(--fs)" } }, linkify(m.content))) : m.type === "image" && m.once ? React.createElement(OnceBubble, { m: m, mine: mine, onOpen: () => setOnceView(m) }) : m.type === "image" ? (React.createElement("div", null,
                             React.createElement("img", { src: m.content, alt: "photo envoy\u00E9e", className: "rounded-xl max-w-full", onClick: (e) => { e.stopPropagation(); setViewer(m.content); } }),
                             m.cap ? React.createElement("div", { className: "mt-1.5 text-[15px] whitespace-pre-wrap break-words" }, linkify(m.cap)) : null)) : m.type === "file" ? (React.createElement("a", { href: m.content, download: m.name, onClick: (e) => e.stopPropagation(), className: "flex items-center gap-3 min-w-[180px]" },
                             React.createElement("span", { className: "w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0", style: { background: "rgba(0,0,0,0.15)" } }, "\uD83D\uDCC4"),
@@ -4059,6 +4780,7 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
                     React.createElement("button", { onClick: () => setPendingImg((p) => { const n = (p || []).filter((_, j) => j !== i); return n.length ? n : null; }), className: "absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center", style: { background: "#FF6B5D", color: "#fff" } },
                         React.createElement(X, { size: 14 }))))),
                 pendingImg.length < 10 && React.createElement("button", { onClick: () => imgRef.current && imgRef.current.click(), className: "shrink-0 flex items-center justify-center", style: { height: 66, width: 66, borderRadius: 14, border: "1.5px dashed var(--line2)", color: "var(--muted)" } }, React.createElement(Plus, { size: 22 }))),
+            React.createElement("button", { onClick: () => setOnceMode((o) => !o), "aria-pressed": onceMode, className: "mt-2 rounded-full px-3 py-1.5 text-xs font-semibold", style: onceMode ? { background: "var(--accent)", color: "var(--on-accent)" } : { background: "var(--card2)", border: "1px solid var(--line)" } }, "👁️ Vue unique" + (onceMode ? " : activée" : "")),
             React.createElement("div", { className: "text-xs pt-1", style: { color: "var(--muted)" } }, pendingImg.length + (pendingImg.length > 1 ? " photos" : " photo") + " · ton message sera la légende de la première. Envoie sans texte pour les photos seules."))),
         gSusp && React.createElement("div", { className: "mx-3 mb-3 mt-1 rounded-2xl px-4 py-3 text-sm flex items-start gap-2", style: { background: "rgba(255,107,93,0.14)", color: "#FF6B5D", border: "1px solid rgba(255,107,93,0.3)" } },
             React.createElement("span", null, gSusp.gone ? "🗑️" : "🚫"),
@@ -4096,6 +4818,7 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
                     React.createElement("button", { onClick: () => doDelete("me"), className: "w-full rounded-xl py-3 text-sm font-semibold mb-2", style: { background: "var(--card2)" } }, "Supprimer pour moi"),
                     confirmDel.allMine && React.createElement("button", { onClick: () => doDelete("all"), className: "w-full rounded-xl py-3 text-sm font-semibold mb-2", style: { background: "#FF6B5D", color: "#0F1115" } }, "Supprimer pour tous"))),
                 React.createElement("button", { onClick: () => setConfirmDel(null), className: "w-full rounded-xl py-2.5 text-sm", style: { color: "var(--muted)" } }, "Annuler")))),
+        onceView && React.createElement(OnceViewer, { m: onceView, onClose: () => { const mm = onceView; setOnceView(null); mutate(mm.id, (x) => Object.assign({}, x, { content: "", viewed: true })); } }),
         viewer && (React.createElement("div", { className: "absolute inset-0 z-40 flex items-center justify-center p-3", style: { background: "rgba(0,0,0,0.92)" }, onClick: () => setViewer(null) },
             React.createElement("img", { src: viewer, alt: "photo", className: "max-w-full max-h-full object-contain rounded-lg" }),
             React.createElement("button", { className: "absolute top-4 right-4 w-10 h-10 rounded-full flex items-center justify-center", style: { background: "rgba(255,255,255,0.15)", color: "#fff" } },
@@ -4325,6 +5048,7 @@ function Settings({ me, prefs, onPrefs, onProfileUpdate, onBack, onLogout, onAdm
     const btnStyle = { background: "var(--accent)", color: "var(--on-accent)" };
     const [delOpen, setDelOpen] = useState(false);
     const [avBuild, setAvBuild] = useState(false);
+    const [codeSheet, setCodeSheet] = useState(false);
     const [delPw, setDelPw] = useState("");
     const inst = useInstall();
     const avFile = useRef(null);
@@ -4520,7 +5244,7 @@ function Settings({ me, prefs, onPrefs, onProfileUpdate, onBack, onLogout, onAdm
                 React.createElement("div", { className: "text-[11px] uppercase tracking-widest mt-1", style: { color: "var(--muted)" } }, "Code ami"),
                 React.createElement("div", { className: "flex items-center gap-2" },
                     React.createElement("span", { className: "font-mono font-bold text-lg", style: { color: "var(--accent-text)", letterSpacing: "0.15em" } }, me.code),
-                    React.createElement("button", { onClick: copyCode, className: "w-7 h-7 rounded-full flex items-center justify-center", style: { background: "var(--card2)" } }, copied ? React.createElement(Check, { size: 14 }) : React.createElement(Copy, { size: 14 }))))),
+                    React.createElement("button", { onClick: copyCode, className: "w-7 h-7 rounded-full flex items-center justify-center", style: { background: "var(--card2)" } }, copied ? React.createElement(Check, { size: 14 }) : React.createElement(Copy, { size: 14 })), !me.admin && React.createElement("button", { onClick: () => setCodeSheet(true), className: "w-7 h-7 rounded-full flex items-center justify-center text-xs", style: { background: "var(--card2)" }, title: "Modifier mon code ami", "aria-label": "Modifier mon code ami" }, "✏️"), codeSheet && React.createElement(MyCodeSheet, { me: me, onClose: () => setCodeSheet(false), onDone: (m) => { setCodeSheet(false); flash(m); }, onProfileUpdate: onProfileUpdate })))),
         React.createElement(Card, { title: "Application" }, inst.standalone ? (React.createElement("div", { className: "text-sm" }, "\u2705 Sans-Trace est install\u00E9e sur cet appareil.")) : inst.prompt ? (React.createElement(React.Fragment, null,
             React.createElement("div", { className: "text-xs mb-3", style: { color: "var(--muted)" } }, "Installe Sans-Trace comme une vraie application : ic\u00F4ne, plein \u00E9cran, d\u00E9marrage rapide."),
             React.createElement("button", { onClick: inst.install, className: "w-full rounded-xl py-3 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "\uD83D\uDCF2 Installer l'application"))) : inst.ios ? (React.createElement("div", { className: "text-sm" },
@@ -6126,10 +6850,16 @@ function App() {
           .stMsg[style*="linear-gradient"] { box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--accent) 80%, transparent), inset 0 1px 0 rgba(255,255,255,0.28) !important; }
           .stKey:active { box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 55%, transparent); }
         }
+        .stNav { border-top: 1px solid var(--line); background: var(--bg); padding-bottom: env(safe-area-inset-bottom, 0px); }
+        .stScroll { scrollbar-width: none; -ms-overflow-style: none; }
+        .stScroll::-webkit-scrollbar { display: none; }
+        .stCard { transition: transform .12s ease; }
+        .stCard:active { transform: scale(.985); }
+        @supports (color: color-mix(in srgb, red, blue)) { .stNav { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); } }
         @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
       `),
         me && React.createElement(CallManager, { me: me, req: callReq, prefs: prefs, viewing: screen === "chat" && openWith ? openWith.id : null, onOpenChat: (ct) => { setOpenWith(ct); setScreen("chat"); } }),
-        React.createElement("div", { className: "fixed bottom-1 left-2 text-[9px] pointer-events-none", style: { opacity: 0.35, color: "var(--fg)" } }, "v5.1"),
+        React.createElement("div", { className: "fixed left-2 text-[9px] pointer-events-none", style: { top: 2, opacity: 0.35, color: "var(--fg)" } }, "v5.2"),
         me && React.createElement(React.Fragment, null,
             React.createElement(LocationSharer, { me: me }),
             React.createElement(MsgScheduler, { me: me }),
@@ -6179,7 +6909,7 @@ function App() {
                     setOpenWith(contact);
                     setScreen("chat");
                 }, onLogout: handleLogout, onSettings: () => setScreen("settings"), prefs: prefs, onPrefs: updatePrefs, onProfileUpdate: setMe }),
-            React.createElement("button", { onClick: () => setScreen("ai"), className: "absolute z-20 flex items-center justify-center", style: { right: 16, bottom: 18, width: 54, height: 54, borderRadius: 27, fontSize: 24, background: "linear-gradient(135deg, var(--accent), #8B5CF6)", boxShadow: "0 12px 28px -8px rgba(139,92,246,0.75)" }, title: "Assistant IA" }, "\u2728"))),
+            React.createElement("button", { onClick: () => setScreen("ai"), className: "absolute z-20 flex items-center justify-center", style: { right: 16, bottom: 84, width: 54, height: 54, borderRadius: 27, fontSize: 24, background: "linear-gradient(135deg, var(--accent), #8B5CF6)", boxShadow: "0 12px 28px -8px rgba(139,92,246,0.75)" }, title: "Assistant IA" }, "\u2728"))),
         me && wide && screen === "home" && (React.createElement("div", { className: "stPane flex flex-col items-center justify-center text-center px-6", style: { background: "radial-gradient(70% 50% at 50% 30%, " + cm("var(--accent)", 12, "transparent") + ", transparent), var(--bg)", color: "var(--muted)" } },
             React.createElement("div", { style: { fontSize: 60 } }, "\uD83D\uDCAC"),
             React.createElement("div", { className: "font-semibold mt-3 text-lg", style: { color: "var(--fg)" } }, "Sans-Trace"),
