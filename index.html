@@ -3366,12 +3366,14 @@ function FluxCard({ me, x, active, flash, onDel }) {
     const share = async () => { const d = { title: "Sans-Trace", text: (x.who || "") + " : " + (x.title || x.cap || "vidéo"), url: location.href.split("#")[0] }; try { if (navigator.share) await navigator.share(d); else { await navigator.clipboard.writeText(d.url); flash("Lien copié"); } } catch (e) { } };
     React.useEffect(() => { if (!active || x.kind !== "vid") return; const t = setTimeout(async () => { const l = parseList(await safeGet("vseen", false)); if (l.indexOf(x.id) === -1) { l.push(x.id); await safeSet("vseen", JSON.stringify(l.slice(-300)), false); } }, 2500); return () => clearTimeout(t); }, [active]);
     const report = async () => { const why = window.prompt("Pourquoi signaler cette vidéo ?"); if (!why || !why.trim()) return; await safeSet("rep:" + Date.now() + "-" + me.id, JSON.stringify({ vid: x.id, vu: x.uid, n: x.n, gid: "", gname: "Vidéo de " + x.who, by: me.id, byName: me.pseudo, why: why.trim().slice(0, 300), ts: Date.now() }), true); flash("Signalement envoyé"); };
+    const [pl, setPl] = React.useState(false);
+    React.useEffect(() => { safeGet("plus:" + x.uid, true).then((r) => setPl(plusOk(r))); }, [x.uid]);
     const long = x.kind === "vid" && x.lg, it = x.it;
     return RE("div", { className: "fluxCard", style: { height: "100%", scrollSnapAlign: "start", scrollSnapStop: "always", position: "relative", background: "#000", color: "#fff", overflow: "hidden" } },
         x.kind === "vid" && (url ? RE("video", { ref: vr, src: url, loop: true, playsInline: true, controls: !!long, onClick: (e) => { if (!long) { const v = e.currentTarget; v.paused ? v.play() : v.pause(); } }, style: { width: "100%", height: "100%", objectFit: long ? "contain" : "cover" } }) : RE("div", { className: "flex h-full items-center justify-center text-sm opacity-70" }, err ? "Vidéo indisponible" : "Chargement…")),
         x.kind === "story" && (it.k === "img" ? RE("img", { src: it.c, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", filter: fcss(it.fl) } }) : RE("div", { className: "flex h-full items-center justify-center p-8 text-center text-2xl", style: Object.assign({ background: "linear-gradient(160deg,#1d4e89,#7b2d8e)" }, storyTxt(it)) }, it.c)),
         RE("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 16px 18px", background: "linear-gradient(transparent,rgba(0,0,0,.65))", pointerEvents: "none" } },
-            RE("div", { className: "font-semibold" }, x.who, x.kind === "story" ? " · story" : x.st ? " · story vidéo" : long ? " · vidéo longue" : "", RE("span", { className: "opacity-70 font-normal" }, " · " + timeAgoShort(x.ts))),
+            RE("div", { className: "font-semibold" }, x.who, pl ? " ⭐" : "", x.kind === "story" ? " · story" : x.st ? " · story vidéo" : long ? " · vidéo longue" : "", RE("span", { className: "opacity-70 font-normal" }, " · " + timeAgoShort(x.ts))),
             RE("div", { className: "text-sm mt-1" }, x.title || x.cap || (it && it.cap) || "")),
         x.kind === "vid" && RE("div", { style: { position: "absolute", right: 12, bottom: long ? 80 : 90, display: "flex", flexDirection: "column", gap: 14, alignItems: "center" } },
             RE("button", { onClick: like, className: "text-3xl", style: { filter: "drop-shadow(0 1px 4px #000)" } }, liked ? "❤️" : "🤍"), RE("span", { className: "text-xs -mt-3" }, likes),
@@ -3382,6 +3384,7 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
     useBack(true, onClose);
     const cv = React.useRef(null), vd = React.useRef(null), st = React.useRef({ fx: "none", fl: "none", cam: "user" }), rec = React.useRef(null), face = React.useRef(null), imgFx = React.useRef(null);
     const [fx, setFx] = React.useState("none"), [fl, setFl] = React.useState("none"), [mode, setMode] = React.useState("story"), [rd, setRd] = React.useState(false), [sec, setSec] = React.useState(0), [res, setRes] = React.useState(null), [cap, setCap] = React.useState(""), [busy, setBusy] = React.useState(false), [cam, setCam] = React.useState("user");
+    const [plus, setPlus] = React.useState(false); React.useEffect(() => { safeGet("plus:" + me.id, true).then((r) => setPlus(plusOk(r))); }, []); const mul = plus ? 2 : 1;
     const modeR = React.useRef(mode); modeR.current = mode; st.current.fx = fx; st.current.fl = fl;
     React.useEffect(() => {
         let alive = true, stream = null, raf = 0, k = 0;
@@ -3407,23 +3410,23 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
         })();
         return () => { alive = false; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach((t) => t.stop()); };
     }, [cam]);
-    React.useEffect(() => { if (!rd) return; const t = setInterval(() => setSec((s) => { const mx = mode === "story" ? VSTORY_MAX : VLONG_MAX; if (s + 1 >= mx) stop(); return s + 1; }), 1000); return () => clearInterval(t); }, [rd]);
+    React.useEffect(() => { if (!rd) return; const t = setInterval(() => setSec((s) => { const mx = (mode === "story" ? VSTORY_MAX : VLONG_MAX) * mul; if (s + 1 >= mx) stop(); return s + 1; }), 1000); return () => clearInterval(t); }, [rd]);
     const start = () => {
         const cs = cv.current.captureStream(30), au = st.current.stream.getAudioTracks()[0]; if (au) cs.addTrack(au);
         const mt = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].filter((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m))[0];
         if (!mt) { flash("Enregistrement non supporté sur ce navigateur."); return; }
         const ch = []; const r = new MediaRecorder(cs, { mimeType: mt, videoBitsPerSecond: mode === "story" ? 650000 : 420000, audioBitsPerSecond: 48000 });
-        r.ondataavailable = (e) => e.data.size && ch.push(e.data); r.onstop = () => { const b = new Blob(ch, { type: mt.split(";")[0] }); if (b.size > VTOT) flash("Vidéo trop lourde (12 Mo max)."); else setRes(b); };
+        r.ondataavailable = (e) => e.data.size && ch.push(e.data); r.onstop = () => { const b = new Blob(ch, { type: mt.split(";")[0] }); if (b.size > VTOT * mul) flash("Vidéo trop lourde."); else setRes(b); };
         r.start(1000); rec.current = r; setSec(0); setRd(true);
     };
     const stop = () => { if (rec.current && rec.current.state !== "inactive") rec.current.stop(); setRd(false); };
-    const importFile = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (f.size > VTOT) { flash("Fichier trop lourd (12 Mo max)."); return; } setSec(0); setRes(f); };
+    const importFile = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (f.size > VTOT * mul) { flash("Fichier trop lourd (" + 12 * mul + " Mo max)."); return; } setSec(0); setRes(f); };
     const publish = async () => { setBusy(true); const ok = await postVideo(me, res, mode === "story" ? { st: 1, cap, dur: sec } : { lg: 1, title: cap }); setBusy(false); if (ok) { flash("Vidéo publiée ✅"); onPosted(); } else flash("Échec de l'envoi."); };
     const url = React.useMemo(() => res ? URL.createObjectURL(res) : null, [res]);
     const chip = (a, on, f) => RE("button", { key: a, onClick: f, className: "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: on ? "#fff" : "rgba(255,255,255,.18)", color: on ? "#000" : "#fff" } }, a);
     return RE("div", { style: { position: "fixed", inset: 0, zIndex: 80, background: "#000", color: "#fff", display: "flex", flexDirection: "column" } },
         RE("video", { ref: vd, playsInline: true, muted: true, style: { display: "none" } }),
-        RE("div", { className: "flex items-center justify-between p-3" }, RE("button", { onClick: onClose, className: "text-xl px-2" }, "✕"), RE("div", { className: "flex gap-2" }, chip("Story 30 s", mode === "story", () => !rd && setMode("story")), chip("Vidéo longue 3 min", mode === "long", () => !rd && setMode("long"))), RE("button", { onClick: () => setCam(cam === "user" ? "environment" : "user"), className: "text-xl px-2" }, "🔄")),
+        RE("div", { className: "flex items-center justify-between p-3" }, RE("button", { onClick: onClose, className: "text-xl px-2" }, "✕"), RE("div", { className: "flex gap-2" }, chip("Story " + 30 * mul + " s", mode === "story", () => !rd && setMode("story")), chip("Vidéo longue " + 3 * mul + " min", mode === "long", () => !rd && setMode("long"))), RE("button", { onClick: () => setCam(cam === "user" ? "environment" : "user"), className: "text-xl px-2" }, "🔄")),
         RE("div", { className: "flex-1 min-h-0 flex items-center justify-center" }, res ? RE("video", { src: url, controls: true, playsInline: true, style: { maxWidth: "100%", maxHeight: "100%" } }) : RE("canvas", { ref: cv, style: { maxWidth: "100%", maxHeight: "100%" } })),
         res ? RE("div", { className: "p-3 flex gap-2" }, RE("input", { value: cap, onChange: (e) => setCap(e.target.value), placeholder: mode === "story" ? "Légende" : "Titre de la vidéo", className: "flex-1 rounded-full px-4 py-2 text-sm text-black" }), RE("button", { onClick: () => setRes(null), className: "px-3" }, "↺"), RE("button", { disabled: busy, onClick: publish, className: "rounded-full px-5 py-2 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "Envoi…" : "Publier"))
             : RE("div", { className: "p-3" },
@@ -3516,17 +3519,54 @@ function ModPanel({ me, onClose, flash }) {
             RE("div", { className: "flex gap-2 flex-wrap mb-3" }, bt("Bloquer 24 h", () => ban(sel, 864e5)), bt("Bloquer 7 j", () => ban(sel, 6048e5)), bt("Bloquer (sans limite)", () => ban(sel, 0)), sel.ban && bt("Débloquer", () => unban(sel), "var(--accent)")),
             !msgs ? RE(Loader2, { size: 18, className: "animate-spin" }) : msgs.filter((m) => m.type !== "system").map((m, i) => RE("div", { key: i, className: "text-sm mb-1.5" }, RE("b", null, (nm[m.from] || "?") + " "), m.type === "text" ? m.content : "[" + (m.type || "média") + "]", RE("span", { className: "text-xs", style: { color: "var(--muted)" } }, " · " + timeAgoShort(m.ts)))))
             : RE(React.Fragment, null,
-                RE("div", { className: "flex gap-2 px-4 mb-3" }, bt("🚩 Signalements" + (reps ? " (" + reps.length + ")" : ""), () => setTab("rep"), tab === "rep" ? "var(--accent)" : null), bt("👥 Groupes", () => setTab("grp"), tab === "grp" ? "var(--accent)" : null), adm && bt("🛡️ Modérateurs", () => setTab("mod"), tab === "mod" ? "var(--accent)" : null)),
+                RE("div", { className: "flex gap-2 px-4 mb-3" }, bt("🚩 Signalements" + (reps ? " (" + reps.length + ")" : ""), () => setTab("rep"), tab === "rep" ? "var(--accent)" : null), bt("👥 Groupes", () => setTab("grp"), tab === "grp" ? "var(--accent)" : null), bt("⭐ Plus", () => setTab("plus"), tab === "plus" ? "var(--accent)" : null)),
                 RE("div", { className: "flex-1 overflow-y-auto px-4 pb-6" },
+                    tab === "plus" && RE(PlusAdmin, { flash }),
                     tab === "rep" && (!reps ? RE(Loader2, { size: 18, className: "animate-spin" }) : !reps.length ? RE("div", { className: "text-sm", style: { color: "var(--muted)" } }, "Aucun signalement.") : reps.map((r) => RE("div", { key: r.key, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("div", { className: "font-semibold" }, (r.vid ? "🎬 " : "Groupe ") + "« " + r.gname + " »"), RE("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, "par " + r.byName + " · " + timeAgoShort(r.ts)), r.why, RE("div", { className: "flex gap-2 mt-2" }, r.vid ? bt("Supprimer la vidéo", () => delVid(r)) : bt("Voir le groupe", () => { const g = (grs || []).filter((x) => x.id === r.gid)[0]; g ? open(g) : flash("Groupe supprimé"); }), bt("Classer", () => delRep(r)))))),
                     tab === "grp" && (!grs ? RE(Loader2, { size: 18, className: "animate-spin" }) : grs.map((g) => RE("button", { key: g.id, onClick: () => open(g), className: "w-full text-left rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("b", null, g.name), g.ban ? " 🚫" : "", RE("span", { style: { color: "var(--muted)" } }, " · " + g.members.length + " membres")))),
                     tab === "mod" && RE("div", null, RE("div", { className: "text-xs mb-2", style: { color: "var(--muted)" } }, "Un modérateur voit les groupes et les signalements, et peut bloquer un groupe."), mods.map((m) => RE("div", { key: m.id, className: "flex items-center justify-between rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, m.w, bt("Retirer", () => rmMod(m.id)))), RE("div", { className: "flex gap-2 mt-2" }, RE("input", { value: code, onChange: (e) => setCode(e.target.value), placeholder: "Code ami du modérateur", className: "flex-1 rounded-full px-4 py-2 text-sm", style: { background: "transparent", color: "var(--fg)", border: "1px solid var(--line2)" } }), bt("Ajouter", addMod, "var(--accent)"))))));
 }
+function plusOk(raw) { if (!raw) return false; const o = parseObj(raw); return !o.until || o.until > Date.now(); }
+function PlusSheet({ me, onClose, flash }) {
+    useBack(true, onClose);
+    const [pl, setPl] = React.useState(undefined), [link, setLink] = React.useState(""), [price, setPrice] = React.useState("");
+    React.useEffect(() => { safeGet("plus:" + me.id, true).then((r) => setPl(r)); safeGet("plusLink", true).then((r) => setLink(r || "")); safeGet("plusPrice", true).then((r) => setPrice(r || "")); }, []);
+    const on = plusOk(pl), o = pl ? parseObj(pl) : {};
+    const go = () => { window.open(link + (link.indexOf("?") === -1 ? "?" : "&") + "client_reference_id=" + encodeURIComponent(me.code || me.id), "_blank"); };
+    return RE("div", { style: { position: "fixed", inset: 0, zIndex: 86, background: "var(--bg)", color: "var(--fg)", display: "flex", flexDirection: "column" } },
+        RE("div", { className: "flex items-center justify-between p-4" }, RE("div", { className: "font-semibold text-lg" }, "⭐ Sans-Trace Plus"), RE("button", { onClick: onClose, className: "text-xl" }, "✕")),
+        RE("div", { className: "flex-1 overflow-y-auto px-5 pb-8" },
+            on && RE("div", { className: "rounded-2xl p-4 mb-4 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Plus actif " + (o.until ? "jusqu'au " + new Date(o.until).toLocaleDateString("fr-FR") : "à vie") + (o.by === "gift" ? " · offert 🎁" : "")),
+            RE("div", { className: "text-sm mb-3", style: { color: "var(--muted)" } }, "Ce que Plus change aujourd'hui :"),
+            ["🎬 Vidéos deux fois plus longues (story 60 s, vidéo longue 6 min) et jusqu'à 24 Mo", "⭐ Badge Plus à côté de ton nom dans le Flux", "💡 Soutenir le développement de l'appli"].map((t) => RE("div", { key: t, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, t)),
+            !on && (link ? RE(React.Fragment, null, RE("div", { className: "text-center text-lg font-bold mt-4" }, price || "Voir le prix sur la page de paiement"), RE("button", { onClick: go, className: "w-full rounded-2xl py-4 mt-3 text-base font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "S'abonner"), RE("div", { className: "text-xs mt-2 text-center", style: { color: "var(--muted)" } }, "Paiement sécurisé par Stripe. Ton Plus est activé par l'admin après le paiement.")) : RE("div", { className: "text-sm mt-4 text-center", style: { color: "var(--muted)" } }, "L'abonnement n'est pas encore ouvert."))));
+}
+function PlusAdmin({ flash }) {
+    const [code, setCode] = React.useState(""), [dur, setDur] = React.useState(30), [rows, setRows] = React.useState(null), [link, setLink] = React.useState(""), [price, setPrice] = React.useState("");
+    const load = async () => { const ks = await safeList("plus:"); setRows(await Promise.all(ks.map(async (k) => { const r = await safeGet(k, true); return { id: k.slice(5), w: await nameOf(k.slice(5)), o: parseObj(r), on: plusOk(r) }; }))); };
+    React.useEffect(() => { load(); safeGet("plusLink", true).then((r) => setLink(r || "")); safeGet("plusPrice", true).then((r) => setPrice(r || "")); }, []);
+    const grant = async (gift) => { const id = await safeGet("codeIndex:" + code.trim().toUpperCase(), true); if (!id) { flash("Code introuvable"); return; } await safeSet("plus:" + id, JSON.stringify({ until: dur ? Date.now() + dur * 864e5 : 0, by: gift ? "gift" : "paid", ts: Date.now() }), true); setCode(""); flash(gift ? "Plus offert 🎁" : "Plus activé ✅"); load(); };
+    const revoke = async (id) => { await safeDelete("plus:" + id, true); load(); };
+    const saveSet = async () => { await safeSet("plusLink", link.trim(), true); await safeSet("plusPrice", price.trim(), true); flash("Réglages enregistrés"); };
+    const inp = { background: "transparent", color: "var(--fg)", border: "1px solid var(--line2)" };
+    const bt = (t, f, c) => RE("button", { onClick: f, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: c || "var(--line2)", color: c ? "var(--on-accent)" : "var(--fg)" } }, t);
+    return RE("div", null,
+        RE("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, "Offrir ou activer Plus avec le code ami"),
+        RE("input", { value: code, onChange: (e) => setCode(e.target.value), placeholder: "Code ami du compte", className: "w-full rounded-full px-4 py-2 text-sm mb-2", style: inp }),
+        RE("div", { className: "flex gap-2 flex-wrap mb-2" }, [[30, "1 mois"], [365, "1 an"], [0, "À vie"]].map((d) => bt(d[1], () => setDur(d[0]), dur === d[0] ? "var(--accent)" : null))),
+        RE("div", { className: "flex gap-2 mb-4" }, bt("🎁 Offrir", () => grant(true), "var(--accent)"), bt("✅ Activer (payé)", () => grant(false))),
+        RE("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, "Lien de paiement Stripe et prix affiché"),
+        RE("input", { value: link, onChange: (e) => setLink(e.target.value), placeholder: "https://buy.stripe.com/…", className: "w-full rounded-full px-4 py-2 text-sm mb-2", style: inp }),
+        RE("input", { value: price, onChange: (e) => setPrice(e.target.value), placeholder: "2,99 € / mois", className: "w-full rounded-full px-4 py-2 text-sm mb-2", style: inp }),
+        RE("div", { className: "mb-4" }, bt("Enregistrer", saveSet, "var(--accent)")),
+        RE("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, "Comptes Plus"),
+        !rows ? RE(Loader2, { size: 18, className: "animate-spin" }) : rows.map((r) => RE("div", { key: r.id, className: "flex items-center justify-between rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("span", null, "⭐ " + r.w + (r.o.by === "gift" ? " 🎁" : "") + (r.on ? "" : " (expiré)") + (r.o.until ? " · " + new Date(r.o.until).toLocaleDateString("fr-FR") : " · à vie")), bt("Retirer", () => revoke(r.id)))));
+}
 function FbWrap({ me, flash, children }) {
-    const [o, setO] = React.useState(false), [md, setMd] = React.useState(false), [ism, setIsm] = React.useState(me.id === ADMIN_ID);
+    const [o, setO] = React.useState(false), [md, setMd] = React.useState(false), [ps, setPs] = React.useState(false), [ism, setIsm] = React.useState(me.id === ADMIN_ID);
     React.useEffect(() => { (async () => { const ks = (await safeList("fb:")).filter((k) => k.endsWith("-" + me.id)); const seen = parseObj(await safeGet("fsseen", false)); let ch = false; for (const k of ks) { const st = await safeGet("fs:" + k, true); if (st && seen[k] !== st) { flash("💡 Ton idée est passée : " + st); seen[k] = st; ch = true; } } if (ch) await safeSet("fsseen", JSON.stringify(seen), false); })(); }, []);
-    React.useEffect(() => { safeGet("mods", true).then((r) => { if (parseList(r).indexOf(me.id) !== -1) setIsm(true); }); }, []);
-    return RE(React.Fragment, null, children, ism && RE("button", { onClick: () => setMd(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🛡️ Modération"), md && RE(ModPanel, { me, flash, onClose: () => setMd(false) }), RE("button", { onClick: () => setO(true), className: "mx-5 mb-3 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "💡 Avis, idées & message à l'admin"), o && RE(FeedbackSheet, { me, flash, onClose: () => setO(false) }));
+    React.useEffect(() => { safeGet("mods", true).then((r) => {  }); }, []);
+    return RE(React.Fragment, null, children, RE("button", { onClick: () => setPs(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Sans-Trace Plus"), ps && RE(PlusSheet, { me, flash, onClose: () => setPs(false) }), ism && RE("button", { onClick: () => setMd(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🛡️ Modération"), md && RE(ModPanel, { me, flash, onClose: () => setMd(false) }), RE("button", { onClick: () => setO(true), className: "mx-5 mb-3 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "💡 Avis, idées & message à l'admin"), o && RE(FeedbackSheet, { me, flash, onClose: () => setO(false) }));
 }
 function BottomNav({ tab, setTab, dot }) {
     const items = [["msgs", "Messages"], ["stories", "Stories"], ["flux", "Flux"], ["discover", "Découvrir"], ["profile", "Profil"]];
