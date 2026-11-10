@@ -3233,7 +3233,7 @@ function timeAgoShort(ts) {
         return m + " min";
     return Math.floor(m / 60) + " h";
 }
-function vidStories(raw) { return parseList(raw).filter((v) => v && v.st && Date.now() - v.ts < 864e5).map((v) => ({ id: v.id, ts: v.ts, k: "vid", c: "", cap: v.cap || "", vm: v })); }
+function vidStories(raw) { return parseList(raw).filter((v) => v && v.st && Date.now() - v.ts < (v.x2 ? 1728e5 : 864e5)).map((v) => ({ id: v.id, ts: v.ts, k: "vid", c: "", cap: v.cap || "", vm: v })); }
 function loadFeed(me, blocked) {
     return __awaiter(this, void 0, void 0, function* () {
         const ids = (yield getFriendIds(me)).filter((x) => blocked.indexOf(x) === -1);
@@ -3316,14 +3316,15 @@ function NavIcon({ name }) {
 }
 /* ===== v5.3.2 : Flux vertical, vidéos, filtres visage ===== */
 const VCH = 512 * 1024, VSTORY_MAX = 30, VLONG_MAX = 180, VTOT = 12 * 1024 * 1024;
-const FACE_FX = [["none", "Aucun", "🚫"], ["lun", "Lunettes", "😎"], ["cou", "Couronne", "👑"], ["chi", "Chien", "🐶"], ["coe", "Cœurs", "😍"], ["clo", "Clown", "🤡"], ["fle", "Fleurs", "🌸"], ["bea", "Beauté", "✨"], ["cha", "Chat", "🐱"], ["mou", "Moustache", "🥸"]];
+const FACE_FX = [["none", "Aucun", "🚫"], ["lun", "Lunettes", "😎"], ["cou", "Couronne", "👑"], ["chi", "Chien", "🐶"], ["coe", "Cœurs", "😍"], ["clo", "Clown", "🤡"], ["fle", "Fleurs", "🌸"], ["bea", "Beauté", "✨"], ["cha", "Chat", "🐱"], ["mou", "Moustache", "🥸"], ["eto", "Étoiles", "🌟"], ["vhs", "VHS", "📼"], ["cin", "Ciné", "🎞️"]];
+const LOCKED_FX = ["cou", "fle", "eto", "vhs", "cin", "img"];
 function blobToB64(b) { return new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.readAsDataURL(b); }); }
 function b64ToBlob(s, t) { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: t }); }
 async function postVideo(me, blob, meta) {
     const id = "v" + Date.now() + Math.random().toString(36).slice(2, 6), n = Math.ceil(blob.size / VCH);
     for (let i = 0; i < n; i++) { if (!(await safeSet("vc:" + id + ":" + i, await blobToB64(blob.slice(i * VCH, (i + 1) * VCH)), true))) return false; }
     const old = parseList(await safeGet("vlist:" + me.id, true));
-    const list = old.filter((v) => v && (!v.st || Date.now() - v.ts < 864e5));
+    const list = old.filter((v) => v && (!v.st || Date.now() - v.ts < (v.x2 ? 1728e5 : 864e5)));
     for (const v of old) if (v && list.indexOf(v) === -1) for (let i = 0; i < (v.n || 0); i++) await safeDelete("vc:" + v.id + ":" + i, true);
     if (!meta.dur) meta.dur = await videoDur(blob);
     list.push(Object.assign({ id, ts: Date.now(), n, mt: blob.type }, meta));
@@ -3339,12 +3340,13 @@ async function loadFluxAll(me, feed) {
     const names = {}; ((feed && feed.groups) || []).forEach((g) => { names[g.uid] = g.first || g.pseudo; }); names[me.id] = me.pseudo;
     const out = [];
     await Promise.all(ids.map(async (uid) => {
-        const l = parseList(await safeGet("vlist:" + uid, true)).filter((v) => v && (!v.st || Date.now() - v.ts < 864e5));
-        l.forEach((v) => out.push(Object.assign({}, v, { uid, who: names[uid] || "Ami", kind: "vid" })));
+        const l = parseList(await safeGet("vlist:" + uid, true)).filter((v) => v && (!v.st || Date.now() - v.ts < (v.x2 ? 1728e5 : 864e5)));
+        const pp = plusOk(await safeGet("plus:" + uid, true));
+        l.forEach((v) => out.push(Object.assign({}, v, { uid, who: names[uid] || "Ami", kind: "vid", pl: pp })));
     }));
     ((feed && feed.groups) || []).forEach((g) => g.items.forEach((i) => out.push({ id: i.id, ts: i.ts, uid: g.uid, who: g.first || g.pseudo, kind: "story", it: i })));
     const seen = parseList(await safeGet("vseen", false));
-    return out.sort((a, b) => ((seen.indexOf(a.id) !== -1 ? 1 : 0) - (seen.indexOf(b.id) !== -1 ? 1 : 0)) || (b.ts - a.ts));
+    return out.sort((a, b) => ((seen.indexOf(a.id) !== -1 ? 1 : 0) - (seen.indexOf(b.id) !== -1 ? 1 : 0)) || ((b.pl ? 1 : 0) - (a.pl ? 1 : 0)) || (b.ts - a.ts));
 }
 function StoryVid({ v }) {
     const [u, setU] = React.useState(null), r = React.useRef(null);
@@ -3353,6 +3355,12 @@ function StoryVid({ v }) {
     return RE("div", { className: "w-full h-full flex items-center justify-center", style: { color: "#fff" } }, !u ? RE(Loader2, { size: 22, className: "animate-spin" }) : u === "x" ? "Vidéo indisponible" : RE("video", { ref: r, src: u, loop: true, playsInline: true, style: { maxWidth: "100%", maxHeight: "100%" } }));
 }
 function videoDur(b) { return new Promise((ok) => { const e = document.createElement("video"), t = setTimeout(() => ok(0), 3000); e.preload = "metadata"; e.onloadedmetadata = () => { clearTimeout(t); ok(isFinite(e.duration) ? Math.round(e.duration) : 0); }; e.onerror = () => { clearTimeout(t); ok(0); }; e.src = URL.createObjectURL(b); }); }
+function PromoCard({ onOpen }) {
+    return RE("div", { style: { height: "100%", scrollSnapAlign: "start", scrollSnapStop: "always", background: "linear-gradient(160deg,#1a1033,#7b2d8e 60%,#FF7A59)", color: "#fff", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" } },
+        RE("div", { className: "text-6xl mb-4" }, "⭐"), RE("div", { className: "text-2xl font-bold mb-2" }, "Sans-Trace Plus"),
+        RE("div", { className: "text-sm mb-5", style: { opacity: 0.9 } }, "Vidéos 2× plus longues, stories 48 h, filtres exclusifs, enregistrés illimités."),
+        RE("button", { onClick: onOpen, className: "rounded-full px-6 py-3 font-semibold", style: { background: "#fff", color: "#111" } }, "Découvrir"));
+}
 function FluxCard({ me, x, active, flash, onDel }) {
     const [url, setUrl] = React.useState(null), [likes, setLikes] = React.useState(0), [liked, setLiked] = React.useState(false), [err, setErr] = React.useState(false);
     const vr = React.useRef(null);
@@ -3362,11 +3370,12 @@ function FluxCard({ me, x, active, flash, onDel }) {
     const like = async () => { const k = "vl:" + x.id + ":" + me.id; if (liked) { await safeDelete(k, true); setLikes(likes - 1); } else { await safeSet(k, "1", true); setLikes(likes + 1); } setLiked(!liked); };
     const [cm, setCm] = React.useState(false), [sv, setSv] = React.useState(false);
     React.useEffect(() => { safeGet("vsave", false).then((r) => setSv(parseList(r).indexOf(x.id) !== -1)); }, [x.id]);
-    const save = async () => { let l = parseList(await safeGet("vsave", false)); l = sv ? l.filter((i) => i !== x.id) : l.concat([x.id]); await safeSet("vsave", JSON.stringify(l.slice(-200)), false); setSv(!sv); flash(sv ? "Retiré des enregistrés" : "Enregistré 🔖"); };
+    const save = async () => { let l = parseList(await safeGet("vsave", false)); if (!sv && !myPlus && l.length >= 15) { flash("⭐ Limite de 15 enregistrés : Plus = illimité"); return; } l = sv ? l.filter((i) => i !== x.id) : l.concat([x.id]); await safeSet("vsave", JSON.stringify(l.slice(-200)), false); setSv(!sv); flash(sv ? "Retiré des enregistrés" : "Enregistré 🔖"); };
     const share = async () => { const d = { title: "Sans-Trace", text: (x.who || "") + " : " + (x.title || x.cap || "vidéo"), url: location.href.split("#")[0] }; try { if (navigator.share) await navigator.share(d); else { await navigator.clipboard.writeText(d.url); flash("Lien copié"); } } catch (e) { } };
     React.useEffect(() => { if (!active || x.kind !== "vid") return; const t = setTimeout(async () => { const l = parseList(await safeGet("vseen", false)); if (l.indexOf(x.id) === -1) { l.push(x.id); await safeSet("vseen", JSON.stringify(l.slice(-300)), false); } }, 2500); return () => clearTimeout(t); }, [active]);
     const report = async () => { const why = window.prompt("Pourquoi signaler cette vidéo ?"); if (!why || !why.trim()) return; await safeSet("rep:" + Date.now() + "-" + me.id, JSON.stringify({ vid: x.id, vu: x.uid, n: x.n, gid: "", gname: "Vidéo de " + x.who, by: me.id, byName: me.pseudo, why: why.trim().slice(0, 300), ts: Date.now() }), true); flash("Signalement envoyé"); };
-    const [pl, setPl] = React.useState(false);
+    const [pl, setPl] = React.useState(false), [myPlus, setMyPlus] = React.useState(true);
+    React.useEffect(() => { safeGet("plus:" + me.id, true).then((r) => setMyPlus(plusOk(r))); }, []);
     React.useEffect(() => { safeGet("plus:" + x.uid, true).then((r) => setPl(plusOk(r))); }, [x.uid]);
     const long = x.kind === "vid" && x.lg, it = x.it;
     return RE("div", { className: "fluxCard", style: { height: "100%", scrollSnapAlign: "start", scrollSnapStop: "always", position: "relative", background: "#000", color: "#fff", overflow: "hidden" } },
@@ -3403,15 +3412,16 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
                     if (FD && (k++ % 2 === 0)) FD.detect(v).then((r) => { if (r[0]) { const b = r[0].boundingBox, m = cam === "user"; face.raw = { x: ((m ? vw - b.x - b.width : b.x) + b.width / 2) * s + (W - vw * s) / 2, y: (b.y + b.height / 2) * s + (H - vh * s) / 2, w: b.width * s * 1.05 }; } else face.raw = null; }).catch(() => { });
                     const rw = face.raw || { x: W / 2, y: H * 0.42, w: W * 0.45 }, o = face.current || rw;
                     face.current = { x: o.x + (rw.x - o.x) * 0.45, y: o.y + (rw.y - o.y) * 0.45, w: o.w + (rw.w - o.w) * 0.45 };
-                    if (fid === "bea") { g.fillStyle = "rgba(255,214,200,.16)"; g.fillRect(0, 0, W, H); } else if (fid === "img") { if (imgFx.current) { const q = face.current; g.drawImage(imgFx.current, q.x - q.w * 0.75, q.y - q.w * 0.75, q.w * 1.5, q.w * 1.5); } } else drawFace(g, fid, face.current);
+                    if (fid === "bea") { g.fillStyle = "rgba(255,214,200,.16)"; g.fillRect(0, 0, W, H); } else if (fid === "vhs") { g.fillStyle = "rgba(0,0,0,.2)"; for (let yy = 0; yy < H; yy += 4) g.fillRect(0, yy, W, 1.5); g.fillStyle = "rgba(255,0,80,.07)"; g.fillRect(0, 0, W, H); } else if (fid === "cin") { const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7); gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, "rgba(0,0,0,.7)"); g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(0, 0, W, H * 0.07); g.fillRect(0, H * 0.93, W, H * 0.07); } else if (fid === "img") { if (imgFx.current) { const q = face.current; g.drawImage(imgFx.current, q.x - q.w * 0.75, q.y - q.w * 0.75, q.w * 1.5, q.w * 1.5); } } else drawFace(g, fid, face.current);
                 }
                 raf = requestAnimationFrame(draw);
             }; draw();
         })();
         return () => { alive = false; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach((t) => t.stop()); };
     }, [cam]);
-    React.useEffect(() => { if (!rd) return; const t = setInterval(() => setSec((s) => { const mx = (mode === "story" ? VSTORY_MAX : VLONG_MAX) * mul; if (s + 1 >= mx) stop(); return s + 1; }), 1000); return () => clearInterval(t); }, [rd]);
+    React.useEffect(() => { if (!rd) return; const t = setInterval(() => setSec((s) => { const mx = (mode === "story" ? VSTORY_MAX : VLONG_MAX) * mul; if (s + 1 >= mx) { stop(); if (!plus) flash("⭐ Avec Plus : vidéos 2× plus longues"); } return s + 1; }), 1000); return () => clearInterval(t); }, [rd]);
     const start = () => {
+        if (!plus && LOCKED_FX.indexOf(st.current.fx) !== -1) { flash("⭐ Ce filtre est réservé à Sans-Trace Plus (aperçu gratuit, enregistrement Plus)"); return; }
         const cs = cv.current.captureStream(30), au = st.current.stream.getAudioTracks()[0]; if (au) cs.addTrack(au);
         const mt = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].filter((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m))[0];
         if (!mt) { flash("Enregistrement non supporté sur ce navigateur."); return; }
@@ -3421,38 +3431,41 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
     };
     const stop = () => { if (rec.current && rec.current.state !== "inactive") rec.current.stop(); setRd(false); };
     const importFile = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (f.size > VTOT * mul) { flash("Fichier trop lourd (" + 12 * mul + " Mo max)."); return; } setSec(0); setRes(f); };
-    const publish = async () => { setBusy(true); const ok = await postVideo(me, res, mode === "story" ? { st: 1, cap, dur: sec } : { lg: 1, title: cap }); setBusy(false); if (ok) { flash("Vidéo publiée ✅"); onPosted(); } else flash("Échec de l'envoi."); };
+    const publish = async () => { setBusy(true); const ok = await postVideo(me, res, mode === "story" ? { st: 1, cap, dur: sec, x2: plus ? 1 : 0 } : { lg: 1, title: cap }); setBusy(false); if (ok) { flash("Vidéo publiée ✅"); onPosted(); } else flash("Échec de l'envoi."); };
     const url = React.useMemo(() => res ? URL.createObjectURL(res) : null, [res]);
     const chip = (a, on, f) => RE("button", { key: a, onClick: f, className: "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: on ? "#fff" : "rgba(255,255,255,.18)", color: on ? "#000" : "#fff" } }, a);
     return RE("div", { style: { position: "fixed", inset: 0, zIndex: 80, background: "#000", color: "#fff", display: "flex", flexDirection: "column" } },
         RE("video", { ref: vd, playsInline: true, muted: true, style: { display: "none" } }),
         RE("div", { className: "flex items-center justify-between p-3" }, RE("button", { onClick: onClose, className: "text-xl px-2" }, "✕"), RE("div", { className: "flex gap-2" }, chip("Story " + 30 * mul + " s", mode === "story", () => !rd && setMode("story")), chip("Vidéo longue " + 3 * mul + " min", mode === "long", () => !rd && setMode("long"))), RE("button", { onClick: () => setCam(cam === "user" ? "environment" : "user"), className: "text-xl px-2" }, "🔄")),
-        RE("div", { className: "flex-1 min-h-0 flex items-center justify-center" }, res ? RE("video", { src: url, controls: true, playsInline: true, style: { maxWidth: "100%", maxHeight: "100%" } }) : RE("canvas", { ref: cv, style: { maxWidth: "100%", maxHeight: "100%" } })),
+        RE("div", { className: "flex-1 min-h-0 flex items-center justify-center" }, res ? RE("video", { src: url, controls: true, playsInline: true, style: { maxWidth: "100%", maxHeight: "100%" } }) : RE("canvas", { ref: cv, onTouchStart: (e) => { st.current.tx = e.touches[0].clientX; }, onTouchEnd: (e) => { const d = e.changedTouches[0].clientX - st.current.tx; if (Math.abs(d) > 50) { const i = FACE_FX.findIndex((q) => q[0] === st.current.fx); setFx(FACE_FX[(i + (d < 0 ? 1 : -1) + FACE_FX.length) % FACE_FX.length][0]); } }, style: { maxWidth: "100%", maxHeight: "100%" } })),
         res ? RE("div", { className: "p-3 flex gap-2" }, RE("input", { value: cap, onChange: (e) => setCap(e.target.value), placeholder: mode === "story" ? "Légende" : "Titre de la vidéo", className: "flex-1 rounded-full px-4 py-2 text-sm text-black" }), RE("button", { onClick: () => setRes(null), className: "px-3" }, "↺"), RE("button", { disabled: busy, onClick: publish, className: "rounded-full px-5 py-2 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "Envoi…" : "Publier"))
             : RE("div", { className: "p-3" },
-                RE("div", { className: "flex gap-2 overflow-x-auto pb-2" }, RE("label", { className: "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: fx === "img" ? "#fff" : "rgba(255,255,255,.18)", color: fx === "img" ? "#000" : "#fff" } }, "🖼️ Mon image", RE("input", { type: "file", accept: "image/*", style: { position: "absolute", width: 1, height: 1, opacity: 0 }, onChange: (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const im = new Image(); im.onload = () => { imgFx.current = im; setFx("img"); }; im.src = URL.createObjectURL(f); } })), FACE_FX.map((f) => chip(f[2] + " " + f[1], fx === f[0], () => setFx(f[0])))),
+                RE("div", { className: "text-center text-xs mb-1" }, (FACE_FX.filter((q) => q[0] === fx)[0] || ["", "Mon image"])[1] + " · glisse l'écran pour changer"), RE("div", { className: "flex gap-2 items-center overflow-x-auto pb-2" }, RE("label", { className: "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: fx === "img" ? "#fff" : "rgba(255,255,255,.18)", color: fx === "img" ? "#000" : "#fff" } }, "🖼️ Mon image", RE("input", { type: "file", accept: "image/*", style: { position: "absolute", width: 1, height: 1, opacity: 0 }, onChange: (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const im = new Image(); im.onload = () => { imgFx.current = im; setFx("img"); }; im.src = URL.createObjectURL(f); } })), FACE_FX.map((f) => RE("button", { key: f[0], onClick: () => setFx(f[0]), style: { position: "relative", flexShrink: 0, width: fx === f[0] ? 58 : 46, height: fx === f[0] ? 58 : 46, borderRadius: "50%", fontSize: fx === f[0] ? 28 : 22, background: "rgba(255,255,255,.18)", border: fx === f[0] ? "3px solid #fff" : "2px solid transparent", transition: "all .15s" } }, f[2], LOCKED_FX.indexOf(f[0]) !== -1 && !plus && RE("span", { style: { position: "absolute", right: -2, top: -2, fontSize: 12 } }, "⭐")))),
                 RE("div", { className: "flex gap-2 overflow-x-auto pb-3" }, STORY_FILTERS.map((f) => chip(f[1], fl === f[0], () => setFl(f[0])))),
                 RE("div", { className: "flex items-center justify-around" }, RE("label", { className: "text-2xl" }, "📁", RE("input", { type: "file", accept: "video/*", onChange: importFile, style: { position: "absolute", width: 1, height: 1, opacity: 0 } })),
                     RE("button", { onClick: rd ? stop : start, style: { width: 68, height: 68, borderRadius: 34, border: "4px solid #fff", background: rd ? "#e11" : "transparent" } }, rd ? sec + " s" : ""), RE("span", { style: { width: 24 } }))));
 }
 function FluxTab({ me, feed, flash }) {
     const [all, setAll] = React.useState(null), [n, setN] = React.useState(6), [cur, setCur] = React.useState(0), [filt, setFilt] = React.useState("all"), [cam, setCam] = React.useState(false), [ver, setVer] = React.useState(0);
-    const box = React.useRef(null), [sids, setSids] = React.useState([]);
+    const box = React.useRef(null), [sids, setSids] = React.useState([]), [ps, setPs] = React.useState(false), [myPlus, setMyPlus] = React.useState(true);
+    React.useEffect(() => { safeGet("plus:" + me.id, true).then((r) => setMyPlus(plusOk(r))); }, [ps]);
     React.useEffect(() => { safeGet("vsave", false).then((r) => setSids(parseList(r))); }, [filt]);
     React.useEffect(() => { loadFluxAll(me, feed).then(setAll); }, [feed, ver]);
     React.useEffect(() => { if (!all) return; (async () => { let L = 0, C = 0; for (const x of all) if (x.kind === "vid" && x.uid === me.id) { L += (await safeList("vl:" + x.id + ":")).length; C += (await safeList("vm:" + x.id + ":")).length; } const p = parseObj(await safeGet("vnotif", false)); if (p.l !== undefined && (L > p.l || C > p.c)) flash("🔔 " + Math.max(0, L - p.l) + " j'aime · " + Math.max(0, C - p.c) + " commentaire(s) sur tes vidéos"); await safeSet("vnotif", JSON.stringify({ l: L, c: C }), false); })(); }, [!all]);
     const base = (all || []).filter((x) => filt === "saved" ? sids.indexOf(x.id) !== -1 : (filt === "all" || (filt === "long" ? x.lg : !x.lg)));
-    const items = []; if (base.length) for (let i = 0; i < n; i++) { const x = base[i % base.length]; items.push(Object.assign({}, x, { key: x.id + "_" + Math.floor(i / base.length) + "_" + i })); }
+    const items = []; if (base.length) for (let i = 0; i < n; i++) { const x = base[i % base.length]; if (!myPlus && i > 0 && i % 8 === 0) items.push({ kind: "promo", key: "pr" + i, id: "pr" + i });
+        items.push(Object.assign({}, x, { key: x.id + "_" + Math.floor(i / base.length) + "_" + i })); }
     const onScroll = (e) => { const h = e.currentTarget.clientHeight, i = Math.round(e.currentTarget.scrollTop / h); if (i !== cur) setCur(i); if (i >= n - 3) setN(n + 6); };
     const del = async (x) => { const l = parseList(await safeGet("vlist:" + me.id, true)).filter((v) => v.id !== x.id); l.length ? await safeSet("vlist:" + me.id, JSON.stringify(l), true) : await safeDelete("vlist:" + me.id, true); const ks = await safeList("vc:" + x.id + ":"); await Promise.all(ks.map((k) => safeDelete(k, true))); setVer(ver + 1); };
     return RE("div", { className: "h-full relative", style: { background: "#000" } },
+        ps && RE(PlusSheet, { me, flash, onClose: () => setPs(false) }),
         cam && RE(FluxCamera, { me, flash, onClose: () => setCam(false), onPosted: () => { setCam(false); setVer(ver + 1); } }),
         RE("div", { className: "absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-3", style: { color: "#fff" } },
             RE("div", { className: "flex gap-2" }, [["all", "Pour toi"], ["short", "Courtes"], ["long", "Longues"], ["saved", "📑"]].map((f) => RE("button", { key: f[0], onClick: () => { setFilt(f[0]); setCur(0); setN(6); if (box.current) box.current.scrollTop = 0; }, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: filt === f[0] ? "#fff" : "rgba(0,0,0,.4)", color: filt === f[0] ? "#000" : "#fff" } }, f[1]))),
             RE("button", { onClick: () => setCam(true), className: "rounded-full px-4 py-2 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "🎥 Créer")),
         !all ? RE("div", { className: "h-full flex items-center justify-center", style: { color: "#fff" } }, RE(Loader2, { size: 22, className: "animate-spin" }))
             : !items.length ? RE("div", { className: "h-full flex flex-col items-center justify-center text-center p-8", style: { color: "#fff" } }, RE("div", { className: "text-5xl mb-3" }, "🎬"), RE("div", { className: "font-semibold" }, "Rien à regarder pour l'instant"), RE("div", { className: "text-sm opacity-70 mt-1" }, "Crée une vidéo ou invite des amis."))
-                : RE("div", { ref: box, onScroll, style: { height: "100%", overflowY: "scroll", scrollSnapType: "y mandatory", overscrollBehavior: "contain" } }, items.map((x, i) => RE("div", { key: x.key, style: { height: "100%" } }, RE(FluxCard, { me, x, active: i === cur, flash, onDel: del })))));
+                : RE("div", { ref: box, onScroll, style: { height: "100%", overflowY: "scroll", scrollSnapType: "y mandatory", overscrollBehavior: "contain" } }, items.map((x, i) => RE("div", { key: x.key, style: { height: "100%" } }, x.kind === "promo" ? RE(PromoCard, { onOpen: () => setPs(true) }) : RE(FluxCard, { me, x, active: i === cur, flash, onDel: del })))));
 }
 
 function CommentsSheet({ me, x, onClose, flash }) {
@@ -3492,6 +3505,7 @@ function drawFace(g, id, c) {
     if (id === "fle") { g.font = w * 0.2 + "px serif"; g.textAlign = "center"; g.textBaseline = "middle"; ["🌸", "🌼", "🌺", "🌷", "🌸", "🌼", "🌺"].forEach((e, i) => { const a = Math.PI + (i / 6) * Math.PI; g.fillText(e, x + Math.cos(a) * w * 0.62, y - w * 0.15 + Math.sin(a) * w * 0.75); }); }
     if (id === "cha") { g.fillStyle = "#555"; [-1, 1].forEach((q) => { g.beginPath(); g.moveTo(x + q * w * 0.5, y - w * 0.35); g.lineTo(x + q * w * 0.28, y - w * 0.85); g.lineTo(x + q * w * 0.08, y - w * 0.55); g.closePath(); g.fill(); }); g.fillStyle = "#F9A8D4"; g.beginPath(); g.arc(x, y + w * 0.1, w * 0.05, 0, 7); g.fill(); g.strokeStyle = "#fff"; g.lineWidth = w * 0.012; [-1, 1].forEach((q) => [0, 1, 2].forEach((i) => { g.beginPath(); g.moveTo(x + q * w * 0.12, y + w * (0.12 + i * 0.04)); g.lineTo(x + q * w * 0.6, y + w * (0.04 + i * 0.1)); g.stroke(); })); }
     if (id === "mou") { g.fillStyle = "#2b1b10"; g.beginPath(); g.moveTo(x, y + w * 0.2); g.quadraticCurveTo(x - w * 0.2, y + w * 0.1, x - w * 0.38, y + w * 0.28); g.quadraticCurveTo(x - w * 0.2, y + w * 0.3, x, y + w * 0.27); g.quadraticCurveTo(x + w * 0.2, y + w * 0.3, x + w * 0.38, y + w * 0.28); g.quadraticCurveTo(x + w * 0.2, y + w * 0.1, x, y + w * 0.2); g.fill(); }
+    if (id === "eto") { g.font = w * 0.18 + "px serif"; g.textAlign = "center"; g.textBaseline = "middle"; const tm = Date.now() / 600; for (let i = 0; i < 8; i++) { const a = tm * (i % 2 ? 1 : -1) + i * 0.8; g.globalAlpha = 0.6 + 0.4 * Math.sin(tm * 3 + i); g.fillText(i % 2 ? "✨" : "🌟", x + Math.cos(a) * w * 0.75, y - w * 0.1 + Math.sin(a) * w * 0.8); } }
     g.restore();
 }
 async function nameOf(u) { const r = await safeGet("profile:" + u, true); return r ? (parseObj(r).pseudo || "?") : "?"; }
@@ -3519,9 +3533,9 @@ function ModPanel({ me, onClose, flash }) {
             RE("div", { className: "flex gap-2 flex-wrap mb-3" }, bt("Bloquer 24 h", () => ban(sel, 864e5)), bt("Bloquer 7 j", () => ban(sel, 6048e5)), bt("Bloquer (sans limite)", () => ban(sel, 0)), sel.ban && bt("Débloquer", () => unban(sel), "var(--accent)")),
             !msgs ? RE(Loader2, { size: 18, className: "animate-spin" }) : msgs.filter((m) => m.type !== "system").map((m, i) => RE("div", { key: i, className: "text-sm mb-1.5" }, RE("b", null, (nm[m.from] || "?") + " "), m.type === "text" ? m.content : "[" + (m.type || "média") + "]", RE("span", { className: "text-xs", style: { color: "var(--muted)" } }, " · " + timeAgoShort(m.ts)))))
             : RE(React.Fragment, null,
-                RE("div", { className: "flex gap-2 px-4 mb-3" }, bt("🚩 Signalements" + (reps ? " (" + reps.length + ")" : ""), () => setTab("rep"), tab === "rep" ? "var(--accent)" : null), bt("👥 Groupes", () => setTab("grp"), tab === "grp" ? "var(--accent)" : null), bt("⭐ Plus", () => setTab("plus"), tab === "plus" ? "var(--accent)" : null)),
+                RE("div", { className: "flex gap-2 px-4 mb-3" }, bt("🚩 Signalements" + (reps ? " (" + reps.length + ")" : ""), () => setTab("rep"), tab === "rep" ? "var(--accent)" : null), bt("👥 Groupes", () => setTab("grp"), tab === "grp" ? "var(--accent)" : null), adm && bt("🛡️ Modérateurs", () => setTab("mod"), tab === "mod" ? "var(--accent)" : null), adm && bt("⭐ Plus", () => setTab("plus"), tab === "plus" ? "var(--accent)" : null)),
                 RE("div", { className: "flex-1 overflow-y-auto px-4 pb-6" },
-                    tab === "plus" && RE(PlusAdmin, { flash }),
+                    tab === "plus" && adm && RE(PlusAdmin, { flash }),
                     tab === "rep" && (!reps ? RE(Loader2, { size: 18, className: "animate-spin" }) : !reps.length ? RE("div", { className: "text-sm", style: { color: "var(--muted)" } }, "Aucun signalement.") : reps.map((r) => RE("div", { key: r.key, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("div", { className: "font-semibold" }, (r.vid ? "🎬 " : "Groupe ") + "« " + r.gname + " »"), RE("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, "par " + r.byName + " · " + timeAgoShort(r.ts)), r.why, RE("div", { className: "flex gap-2 mt-2" }, r.vid ? bt("Supprimer la vidéo", () => delVid(r)) : bt("Voir le groupe", () => { const g = (grs || []).filter((x) => x.id === r.gid)[0]; g ? open(g) : flash("Groupe supprimé"); }), bt("Classer", () => delRep(r)))))),
                     tab === "grp" && (!grs ? RE(Loader2, { size: 18, className: "animate-spin" }) : grs.map((g) => RE("button", { key: g.id, onClick: () => open(g), className: "w-full text-left rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("b", null, g.name), g.ban ? " 🚫" : "", RE("span", { style: { color: "var(--muted)" } }, " · " + g.members.length + " membres")))),
                     tab === "mod" && RE("div", null, RE("div", { className: "text-xs mb-2", style: { color: "var(--muted)" } }, "Un modérateur voit les groupes et les signalements, et peut bloquer un groupe."), mods.map((m) => RE("div", { key: m.id, className: "flex items-center justify-between rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, m.w, bt("Retirer", () => rmMod(m.id)))), RE("div", { className: "flex gap-2 mt-2" }, RE("input", { value: code, onChange: (e) => setCode(e.target.value), placeholder: "Code ami du modérateur", className: "flex-1 rounded-full px-4 py-2 text-sm", style: { background: "transparent", color: "var(--fg)", border: "1px solid var(--line2)" } }), bt("Ajouter", addMod, "var(--accent)"))))));
@@ -3529,8 +3543,8 @@ function ModPanel({ me, onClose, flash }) {
 function plusOk(raw) { if (!raw) return false; const o = parseObj(raw); return !o.until || o.until > Date.now(); }
 function PlusSheet({ me, onClose, flash }) {
     useBack(true, onClose);
-    const [pl, setPl] = React.useState(undefined), [link, setLink] = React.useState(""), [price, setPrice] = React.useState("");
-    React.useEffect(() => { safeGet("plus:" + me.id, true).then((r) => setPl(r)); safeGet("plusLink", true).then((r) => setLink(r || "")); safeGet("plusPrice", true).then((r) => setPrice(r || "")); }, []);
+    const [trial, setTrial] = React.useState(null), [pl, setPl] = React.useState(undefined), [link, setLink] = React.useState(""), [price, setPrice] = React.useState("");
+    React.useEffect(() => { safeGet("plusTrial", false).then((r) => setTrial(!!r)); safeGet("plus:" + me.id, true).then((r) => setPl(r)); safeGet("plusLink", true).then((r) => setLink(r || "")); safeGet("plusPrice", true).then((r) => setPrice(r || "")); }, []);
     const on = plusOk(pl), o = pl ? parseObj(pl) : {};
     const go = () => { window.open(link + (link.indexOf("?") === -1 ? "?" : "&") + "client_reference_id=" + encodeURIComponent(me.code || me.id), "_blank"); };
     return RE("div", { style: { position: "fixed", inset: 0, zIndex: 86, background: "var(--bg)", color: "var(--fg)", display: "flex", flexDirection: "column" } },
@@ -3538,7 +3552,8 @@ function PlusSheet({ me, onClose, flash }) {
         RE("div", { className: "flex-1 overflow-y-auto px-5 pb-8" },
             on && RE("div", { className: "rounded-2xl p-4 mb-4 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Plus actif " + (o.until ? "jusqu'au " + new Date(o.until).toLocaleDateString("fr-FR") : "à vie") + (o.by === "gift" ? " · offert 🎁" : "")),
             RE("div", { className: "text-sm mb-3", style: { color: "var(--muted)" } }, "Ce que Plus change aujourd'hui :"),
-            ["🎬 Vidéos deux fois plus longues (story 60 s, vidéo longue 6 min) et jusqu'à 24 Mo", "⭐ Badge Plus à côté de ton nom dans le Flux", "💡 Soutenir le développement de l'appli"].map((t) => RE("div", { key: t, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, t)),
+            ["🎬 Vidéos 2× plus longues : story 60 s, vidéo longue 6 min, 24 Mo", "⏳ Stories vidéo visibles 48 h au lieu de 24 h", "✨ Filtres exclusifs : Couronne, Fleurs, Étoiles, VHS, Ciné, Mon image", "📑 Enregistrés illimités (15 en gratuit)", "⭐ Badge Plus et mise en avant dans le Flux", "💡 Soutenir le développement de l'appli"].map((t) => RE("div", { key: t, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, t)),
+            !on && trial === false && RE("button", { onClick: async () => { await safeSet("plus:" + me.id, JSON.stringify({ until: Date.now() + 3 * 864e5, by: "trial", ts: Date.now() }), true); await safeSet("plusTrial", "1", false); setTrial(true); setPl(JSON.stringify({ until: Date.now() + 3 * 864e5 })); flash("Essai Plus de 3 jours activé 🎉"); }, className: "w-full rounded-2xl py-3.5 mt-4 text-sm font-semibold", style: { border: "2px solid #F5B800", color: "var(--fg)" } }, "🎁 Essayer gratuitement 3 jours"),
             !on && (link ? RE(React.Fragment, null, RE("div", { className: "text-center text-lg font-bold mt-4" }, price || "Voir le prix sur la page de paiement"), RE("button", { onClick: go, className: "w-full rounded-2xl py-4 mt-3 text-base font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "S'abonner"), RE("div", { className: "text-xs mt-2 text-center", style: { color: "var(--muted)" } }, "Paiement sécurisé par Stripe. Ton Plus est activé par l'admin après le paiement.")) : RE("div", { className: "text-sm mt-4 text-center", style: { color: "var(--muted)" } }, "L'abonnement n'est pas encore ouvert."))));
 }
 function PlusAdmin({ flash }) {
@@ -3565,7 +3580,7 @@ function PlusAdmin({ flash }) {
 function FbWrap({ me, flash, children }) {
     const [o, setO] = React.useState(false), [md, setMd] = React.useState(false), [ps, setPs] = React.useState(false), [ism, setIsm] = React.useState(me.id === ADMIN_ID);
     React.useEffect(() => { (async () => { const ks = (await safeList("fb:")).filter((k) => k.endsWith("-" + me.id)); const seen = parseObj(await safeGet("fsseen", false)); let ch = false; for (const k of ks) { const st = await safeGet("fs:" + k, true); if (st && seen[k] !== st) { flash("💡 Ton idée est passée : " + st); seen[k] = st; ch = true; } } if (ch) await safeSet("fsseen", JSON.stringify(seen), false); })(); }, []);
-    React.useEffect(() => { safeGet("mods", true).then((r) => {  }); }, []);
+    React.useEffect(() => { safeGet("mods", true).then((r) => { if (parseList(r).indexOf(me.id) !== -1) setIsm(true); }); }, []);
     return RE(React.Fragment, null, children, RE("button", { onClick: () => setPs(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Sans-Trace Plus"), ps && RE(PlusSheet, { me, flash, onClose: () => setPs(false) }), ism && RE("button", { onClick: () => setMd(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🛡️ Modération"), md && RE(ModPanel, { me, flash, onClose: () => setMd(false) }), RE("button", { onClick: () => setO(true), className: "mx-5 mb-3 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "💡 Avis, idées & message à l'admin"), o && RE(FeedbackSheet, { me, flash, onClose: () => setO(false) }));
 }
 function BottomNav({ tab, setTab, dot }) {
