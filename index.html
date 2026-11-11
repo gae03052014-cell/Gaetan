@@ -2407,8 +2407,9 @@ const AVATAR_PALETTE = [
     "#2DD4BF", "#FF6B5D", "#E8A33D", "#8B7FD9", "#4EA1D3", "#E86BA0",
 ];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const APP_VERSION = "5.4";
+const APP_VERSION = "5.4.1";
 const NEWS = [
+    ["🎥", "Nouvelle caméra vidéo", "Tout le studio est redessiné : minuteur, zoom, grille, lampe torche, anneau de progression, effets et filtres en carrousel, aperçu plein écran avant de publier."],
     ["✨", "Nouveau design", "Barre de navigation en verre, boutons plus doux, animations et Flux plus lisible."],
     ["🎬", "Flux amélioré", "Onglet Enregistrés, vidéos non vues en premier, réponses aux commentaires, signalement de vidéos, nouveaux filtres Chat et Moustache."],
     ["🎬", "Flux vertical", "Un nouvel onglet Flux : fais défiler à l'infini les vidéos, stories et vidéos longues de tes amis, comme sur Snap."],
@@ -3391,20 +3392,27 @@ function FluxCard({ me, x, active, flash, onDel }) {
 }
 function FluxCamera({ me, onClose, onPosted, flash }) {
     useBack(true, onClose);
-    const cv = React.useRef(null), vd = React.useRef(null), st = React.useRef({ fx: "none", fl: "none", cam: "user" }), rec = React.useRef(null), face = React.useRef(null), imgFx = React.useRef(null);
+    const cv = React.useRef(null), vd = React.useRef(null), st = React.useRef({ fx: "none", fl: "none", cam: "user", zoom: 1 }), rec = React.useRef(null), face = React.useRef(null), imgFx = React.useRef(null);
     const [fx, setFx] = React.useState("none"), [fl, setFl] = React.useState("none"), [mode, setMode] = React.useState("story"), [rd, setRd] = React.useState(false), [sec, setSec] = React.useState(0), [res, setRes] = React.useState(null), [cap, setCap] = React.useState(""), [busy, setBusy] = React.useState(false), [cam, setCam] = React.useState("user");
+    const [panel, setPanel] = React.useState(null), [tm, setTm] = React.useState(0), [cd, setCd] = React.useState(0), [grid, setGrid] = React.useState(false), [zoom, setZoom] = React.useState(1), [torch, setTorch] = React.useState(false), [torchOk, setTorchOk] = React.useState(false), [muted, setMuted] = React.useState(false), [toast, setToast] = React.useState(""), [rdur, setRdur] = React.useState(0), [ready, setReady] = React.useState(false);
     const [plus, setPlus] = React.useState(false); React.useEffect(() => { safeGet("plus:" + me.id, true).then((r) => setPlus(plusOk(r))); }, []); const mul = plus ? 2 : 1;
-    const modeR = React.useRef(mode); modeR.current = mode; st.current.fx = fx; st.current.fl = fl;
+    const modeR = React.useRef(mode); modeR.current = mode; st.current.fx = fx; st.current.fl = fl; st.current.zoom = zoom;
+    useBack(!!res, () => setRes(null));
+    const mx = (mode === "story" ? VSTORY_MAX : VLONG_MAX) * mul;
+    const vert = mode === "story";
     React.useEffect(() => {
         let alive = true, stream = null, raf = 0, k = 0;
+        setReady(false); setTorchOk(false); setTorch(false);
         const FD = window.FaceDetector ? new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 }) : null;
         (async () => {
             try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: cam, width: { ideal: 1280 } }, audio: true }); } catch (e) { flash("Caméra ou micro refusé."); onClose(); return; }
             const v = vd.current; v.srcObject = stream; v.muted = true; await v.play().catch(() => { }); st.current.stream = stream;
+            try { const tr = stream.getVideoTracks()[0], caps = tr.getCapabilities ? tr.getCapabilities() : {}; if (alive) setTorchOk(!!caps.torch); } catch (e) { }
+            if (alive) setReady(true);
             const draw = () => {
                 if (!alive) return; const c = cv.current, g = c.getContext("2d"), vert = modeR.current === "story";
                 const W = vert ? 480 : 640, H = vert ? 854 : 360; if (c.width !== W) { c.width = W; c.height = H; }
-                const vw = v.videoWidth || W, vh = v.videoHeight || H, s = Math.max(W / vw, H / vh);
+                const vw = v.videoWidth || W, vh = v.videoHeight || H, s = Math.max(W / vw, H / vh) * (st.current.zoom || 1);
                 g.save(); g.filter = ((fcss(st.current.fl) || "") + (st.current.fx === "bea" ? " blur(0.8px) brightness(1.07) contrast(.96) saturate(1.1)" : "")).trim() || "none"; if (cam === "user") { g.translate(W, 0); g.scale(-1, 1); }
                 g.drawImage(v, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s); g.restore(); g.filter = "none";
                 const fid = st.current.fx;
@@ -3419,31 +3427,87 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
         })();
         return () => { alive = false; cancelAnimationFrame(raf); if (stream) stream.getTracks().forEach((t) => t.stop()); };
     }, [cam]);
-    React.useEffect(() => { if (!rd) return; const t = setInterval(() => setSec((s) => { const mx = (mode === "story" ? VSTORY_MAX : VLONG_MAX) * mul; if (s + 1 >= mx) { stop(); if (!plus) flash("⭐ Avec Plus : vidéos 2× plus longues"); } return s + 1; }), 1000); return () => clearInterval(t); }, [rd]);
+    React.useEffect(() => { const s = st.current.stream; if (!s || !torchOk) return; try { s.getVideoTracks()[0].applyConstraints({ advanced: [{ torch: torch }] }).catch(() => { }); } catch (e) { } }, [torch, torchOk]);
+    React.useEffect(() => { if (!rd) return; const t = setInterval(() => setSec((s) => { if (s + 1 >= mx) { stop(); if (!plus) flash("⭐ Avec Plus : vidéos 2× plus longues"); } return s + 1; }), 1000); return () => clearInterval(t); }, [rd]);
+    React.useEffect(() => { if (cd <= 0) return; const t = setTimeout(() => { if (cd === 1) { setCd(0); start(); } else setCd(cd - 1); }, 1000); return () => clearTimeout(t); }, [cd]);
+    React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(""), 1300); return () => clearTimeout(t); }, [toast]);
+    React.useEffect(() => { setRdur(0); if (res) videoDur(res).then((d) => setRdur(d || 0)); }, [res]);
     const start = () => {
         if (!plus && LOCKED_FX.indexOf(st.current.fx) !== -1) { flash("⭐ Ce filtre est réservé à Sans-Trace Plus (aperçu gratuit, enregistrement Plus)"); return; }
         const cs = cv.current.captureStream(30), au = st.current.stream.getAudioTracks()[0]; if (au) cs.addTrack(au);
         const mt = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].filter((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m))[0];
         if (!mt) { flash("Enregistrement non supporté sur ce navigateur."); return; }
         const ch = []; const r = new MediaRecorder(cs, { mimeType: mt, videoBitsPerSecond: mode === "story" ? 650000 : 420000, audioBitsPerSecond: 48000 });
-        r.ondataavailable = (e) => e.data.size && ch.push(e.data); r.onstop = () => { const b = new Blob(ch, { type: mt.split(";")[0] }); if (b.size > VTOT * mul) flash("Vidéo trop lourde."); else setRes(b); };
-        r.start(1000); rec.current = r; setSec(0); setRd(true);
+        r.ondataavailable = (e) => e.data.size && ch.push(e.data); r.onstop = () => { const bl = new Blob(ch, { type: mt.split(";")[0] }); if (bl.size > VTOT * mul) flash("Vidéo trop lourde."); else setRes(bl); };
+        r.start(1000); rec.current = r; setSec(0); setRd(true); setPanel(null); try { navigator.vibrate && navigator.vibrate(18); } catch (e) { }
     };
     const stop = () => { if (rec.current && rec.current.state !== "inactive") rec.current.stop(); setRd(false); };
+    const press = () => { if (rd) stop(); else if (cd > 0) setCd(0); else if (tm > 0) { setPanel(null); setCd(tm); } else start(); };
     const importFile = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (f.size > VTOT * mul) { flash("Fichier trop lourd (" + 12 * mul + " Mo max)."); return; } setSec(0); setRes(f); };
     const publish = async () => { setBusy(true); const ok = await postVideo(me, res, mode === "story" ? { st: 1, cap, dur: sec, x2: plus ? 1 : 0 } : { lg: 1, title: cap }); setBusy(false); if (ok) { flash("Vidéo publiée ✅"); onPosted(); } else flash("Échec de l'envoi."); };
     const url = React.useMemo(() => res ? URL.createObjectURL(res) : null, [res]);
-    const chip = (a, on, f) => RE("button", { key: a, onClick: f, className: "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: on ? "#fff" : "rgba(255,255,255,.18)", color: on ? "#000" : "#fff" } }, a);
-    return RE("div", { style: { position: "fixed", inset: 0, zIndex: 80, background: "#000", color: "#fff", display: "flex", flexDirection: "column" } },
+    const fxName = (id) => (FACE_FX.filter((q) => q[0] === id)[0] || ["", "Mon image"])[1];
+    const pickFx = (id) => { setFx(id); setToast(fxName(id)); };
+    const mmss = (n) => { n = Math.max(0, Math.round(n || 0)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
+    const glass = { background: "rgba(22,22,30,.55)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,.14)", color: "#fff" };
+    const railBtn = (key, icon, label, on, f, sub) => RE("button", { key: key, onClick: f, "aria-label": label, "aria-pressed": !!on, title: label, style: Object.assign({}, glass, { width: 46, height: 46, borderRadius: 23, fontSize: 19, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", transition: "transform .15s, background .15s" }, on ? { background: "#fff", color: "#000", border: "1px solid #fff" } : {}) }, icon, sub ? RE("span", { style: { position: "absolute", right: -3, bottom: -3, minWidth: 18, height: 18, borderRadius: 9, fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#ff5f7e,#ff9a3c)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" } }, sub) : null);
+    const C = 2 * Math.PI * 38;
+    const frame = { position: "relative", overflow: "hidden", borderRadius: 30, background: "#0b0b10", boxShadow: "0 24px 70px -20px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.08)", aspectRatio: vert ? "9 / 16" : "16 / 9", height: vert ? "100%" : "auto", width: vert ? "auto" : "100%", maxWidth: "100%", maxHeight: "100%", transition: "all .25s ease" };
+    return RE("div", { style: { position: "fixed", inset: 0, zIndex: 80, color: "#fff", display: "flex", flexDirection: "column", background: "radial-gradient(120% 70% at 50% -10%, #23233a 0%, #08080c 62%)", paddingTop: "env(safe-area-inset-top, 0px)" } },
+        RE("style", null, "@keyframes fcPulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes fcPop{0%{transform:scale(.5);opacity:0}30%{opacity:1}100%{transform:scale(1.4);opacity:0}}@keyframes fcIn{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}.fcScroll::-webkit-scrollbar{display:none}.fcScroll{scrollbar-width:none}"),
         RE("video", { ref: vd, playsInline: true, muted: true, style: { display: "none" } }),
-        RE("div", { className: "flex items-center justify-between p-3" }, RE("button", { onClick: onClose, className: "text-xl px-2" }, "✕"), RE("div", { className: "flex gap-2" }, chip("Story " + 30 * mul + " s", mode === "story", () => !rd && setMode("story")), chip("Vidéo longue " + 3 * mul + " min", mode === "long", () => !rd && setMode("long"))), RE("button", { onClick: () => setCam(cam === "user" ? "environment" : "user"), className: "text-xl px-2" }, "🔄")),
-        RE("div", { className: "flex-1 min-h-0 flex items-center justify-center" }, res ? RE("video", { src: url, controls: true, playsInline: true, style: { maxWidth: "100%", maxHeight: "100%" } }) : RE("canvas", { ref: cv, onTouchStart: (e) => { st.current.tx = e.touches[0].clientX; }, onTouchEnd: (e) => { const d = e.changedTouches[0].clientX - st.current.tx; if (Math.abs(d) > 50) { const i = FACE_FX.findIndex((q) => q[0] === st.current.fx); setFx(FACE_FX[(i + (d < 0 ? 1 : -1) + FACE_FX.length) % FACE_FX.length][0]); } }, style: { maxWidth: "100%", maxHeight: "100%" } })),
-        res ? RE("div", { className: "p-3 flex gap-2" }, RE("input", { value: cap, onChange: (e) => setCap(e.target.value), placeholder: mode === "story" ? "Légende" : "Titre de la vidéo", className: "flex-1 rounded-full px-4 py-2 text-sm text-black" }), RE("button", { onClick: () => setRes(null), className: "px-3" }, "↺"), RE("button", { disabled: busy, onClick: publish, className: "rounded-full px-5 py-2 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "Envoi…" : "Publier"))
-            : RE("div", { className: "p-3" },
-                RE("div", { className: "text-center text-xs mb-1" }, (FACE_FX.filter((q) => q[0] === fx)[0] || ["", "Mon image"])[1] + " · glisse l'écran pour changer"), RE("div", { className: "flex gap-2 items-center overflow-x-auto pb-2" }, RE("label", { className: "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: fx === "img" ? "#fff" : "rgba(255,255,255,.18)", color: fx === "img" ? "#000" : "#fff" } }, "🖼️ Mon image", RE("input", { type: "file", accept: "image/*", style: { position: "absolute", width: 1, height: 1, opacity: 0 }, onChange: (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const im = new Image(); im.onload = () => { imgFx.current = im; setFx("img"); }; im.src = URL.createObjectURL(f); } })), FACE_FX.map((f) => RE("button", { key: f[0], onClick: () => setFx(f[0]), style: { position: "relative", flexShrink: 0, width: fx === f[0] ? 58 : 46, height: fx === f[0] ? 58 : 46, borderRadius: "50%", fontSize: fx === f[0] ? 28 : 22, background: "rgba(255,255,255,.18)", border: fx === f[0] ? "3px solid #fff" : "2px solid transparent", transition: "all .15s" } }, f[2], LOCKED_FX.indexOf(f[0]) !== -1 && !plus && RE("span", { style: { position: "absolute", right: -2, top: -2, fontSize: 12 } }, "⭐")))),
-                RE("div", { className: "flex gap-2 overflow-x-auto pb-3" }, STORY_FILTERS.map((f) => chip(f[1], fl === f[0], () => setFl(f[0])))),
-                RE("div", { className: "flex items-center justify-around" }, RE("label", { className: "text-2xl" }, "📁", RE("input", { type: "file", accept: "video/*", onChange: importFile, style: { position: "absolute", width: 1, height: 1, opacity: 0 } })),
-                    RE("button", { onClick: rd ? stop : start, style: { width: 68, height: 68, borderRadius: 34, border: "4px solid #fff", background: rd ? "#e11" : "transparent" } }, rd ? sec + " s" : ""), RE("span", { style: { width: 24 } }))));
+        /* barre du haut */
+        RE("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", gap: 10 } },
+            RE("button", { onClick: res ? () => setRes(null) : onClose, "aria-label": res ? "Reprendre" : "Fermer", style: Object.assign({}, glass, { width: 42, height: 42, borderRadius: 21, fontSize: 18 }) }, res ? "↺" : "✕"),
+            res ? RE("div", { style: Object.assign({}, glass, { borderRadius: 999, padding: "8px 16px", fontSize: 13, fontWeight: 700 }) }, mode === "story" ? "Aperçu de ta story" : "Aperçu de ta vidéo") : RE("div", { role: "tablist", style: Object.assign({}, glass, { position: "relative", display: "flex", borderRadius: 999, padding: 4, opacity: rd || cd > 0 ? 0.5 : 1 }) },
+                RE("div", { style: { position: "absolute", top: 4, bottom: 4, left: mode === "story" ? 4 : "50%", width: "calc(50% - 4px)", borderRadius: 999, background: "#fff", transition: "left .22s ease" } }),
+                [["story", "Story · " + 30 * mul + " s"], ["long", "Longue · " + 3 * mul + " min"]].map((m) => RE("button", { key: m[0], role: "tab", "aria-selected": mode === m[0], onClick: () => { if (!rd && cd === 0) setMode(m[0]); }, style: { position: "relative", zIndex: 1, padding: "8px 14px", fontSize: 12.5, fontWeight: 700, borderRadius: 999, color: mode === m[0] ? "#000" : "#fff", whiteSpace: "nowrap", transition: "color .2s" } }, m[1]))),
+            RE("div", { style: { width: 42 } })),
+        /* scène */
+        RE("div", { style: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 12px" } },
+            RE("div", { style: frame, onTouchStart: (e) => { st.current.tx = e.touches[0].clientX; }, onTouchEnd: (e) => { if (res || rd) return; const d = e.changedTouches[0].clientX - st.current.tx; if (Math.abs(d) > 50) { const i = FACE_FX.findIndex((q) => q[0] === st.current.fx); pickFx(FACE_FX[(Math.max(i, 0) + (d < 0 ? 1 : -1) + FACE_FX.length) % FACE_FX.length][0]); } } },
+                res ? RE("video", { src: url, autoPlay: true, loop: true, playsInline: true, muted: muted, style: { width: "100%", height: "100%", objectFit: "contain", background: "#000" } }) : RE("canvas", { ref: cv, style: { width: "100%", height: "100%", display: "block" } }),
+                !res && !ready && RE("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10, background: "#0b0b10", fontSize: 13, color: "rgba(255,255,255,.7)" } }, RE("div", { style: { fontSize: 34, animation: "fcPulse 1.2s infinite" } }, "🎥"), "Ouverture de la caméra…"),
+                !res && grid && RE("div", { style: { position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: "linear-gradient(to right, transparent 33.2%, rgba(255,255,255,.28) 33.3%, transparent 33.5%, transparent 66.4%, rgba(255,255,255,.28) 66.6%, transparent 66.8%), linear-gradient(to bottom, transparent 33.2%, rgba(255,255,255,.28) 33.3%, transparent 33.5%, transparent 66.4%, rgba(255,255,255,.28) 66.6%, transparent 66.8%)" } }),
+                !res && rd && RE("div", { style: Object.assign({}, glass, { position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", borderRadius: 999, padding: "6px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 700 }) }, RE("span", { style: { width: 10, height: 10, borderRadius: 5, background: "#ff3b4e", animation: "fcPulse 1s infinite" } }), mmss(sec) + " / " + mmss(mx)),
+                !res && !rd && RE("div", { style: { position: "absolute", right: 10, top: 12, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", animation: "fcIn .3s ease" } },
+                    railBtn("flip", "🔄", "Retourner la caméra", false, () => setCam(cam === "user" ? "environment" : "user")),
+                    railBtn("tm", "⏱", "Minuteur", tm > 0, () => setTm(tm === 0 ? 3 : tm === 3 ? 5 : tm === 5 ? 10 : 0), tm ? tm + "s" : null),
+                    railBtn("zoom", "🔍", "Zoom", zoom > 1, () => setZoom(zoom === 1 ? 1.5 : zoom === 1.5 ? 2 : 1), zoom > 1 ? zoom + "×" : null),
+                    railBtn("grid", "▦", "Grille de cadrage", grid, () => setGrid(!grid)),
+                    torchOk && cam === "environment" && railBtn("torch", "🔦", "Lampe torche", torch, () => setTorch(!torch))),
+                !res && cd > 0 && RE("div", { key: cd, style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 140, fontWeight: 800, textShadow: "0 8px 40px rgba(0,0,0,.6)", animation: "fcPop 1s ease-out", pointerEvents: "none" } }, cd),
+                !res && toast && RE("div", { style: Object.assign({}, glass, { position: "absolute", left: "50%", bottom: 18, transform: "translateX(-50%)", borderRadius: 999, padding: "7px 16px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", animation: "fcIn .2s ease" }) }, toast),
+                res && RE("button", { onClick: () => setMuted(!muted), "aria-label": muted ? "Activer le son" : "Couper le son", style: Object.assign({}, glass, { position: "absolute", top: 12, right: 12, width: 42, height: 42, borderRadius: 21, fontSize: 17 }) }, muted ? "🔇" : "🔊"),
+                res && RE("div", { style: { position: "absolute", left: 12, bottom: 12, display: "flex", gap: 6 } }, [mmss(sec || rdur), fmtSize(res.size)].map((t) => RE("span", { key: t, style: Object.assign({}, glass, { borderRadius: 999, padding: "5px 11px", fontSize: 11.5, fontWeight: 700 }) }, t))))),
+        /* bas */
+        res ? RE("div", { style: Object.assign({}, glass, { borderRadius: "28px 28px 0 0", margin: "10px 0 0", padding: "16px 16px calc(16px + env(safe-area-inset-bottom, 0px))", animation: "fcIn .25s ease", borderBottom: "none" }) },
+            RE("input", { value: cap, onChange: (e) => setCap(e.target.value), maxLength: mode === "story" ? 100 : 80, placeholder: mode === "story" ? "Ajoute une légende…" : "Donne un titre à ta vidéo…", "aria-label": mode === "story" ? "Légende" : "Titre", style: { width: "100%", borderRadius: 16, padding: "13px 16px", fontSize: 15, outline: "none", background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.18)", marginBottom: 12 } }),
+            RE("div", { style: { display: "flex", gap: 10 } },
+                RE("button", { onClick: () => setRes(null), style: Object.assign({}, glass, { flex: "0 0 auto", borderRadius: 18, padding: "0 20px", height: 52, fontSize: 15, fontWeight: 700 }) }, "↺ Refaire"),
+                RE("button", { disabled: busy, onClick: publish, style: { flex: 1, height: 52, borderRadius: 18, fontSize: 16, fontWeight: 800, color: "#fff", background: "linear-gradient(135deg,#ff5f7e,#ff9a3c)", boxShadow: "0 10px 30px -10px rgba(255,95,126,.7)", opacity: busy ? 0.7 : 1 } }, busy ? "Envoi en cours…" : mode === "story" ? "Publier dans ma story  ➤" : "Publier dans le Flux  ➤")))
+            : RE("div", { style: { padding: "10px 0 calc(14px + env(safe-area-inset-bottom, 0px))" } },
+                panel === "fx" && RE("div", { style: { animation: "fcIn .2s ease", marginBottom: 12 } },
+                    RE("div", { className: "fcScroll", style: { display: "flex", gap: 12, overflowX: "auto", padding: "4px 16px 6px", alignItems: "flex-start" } },
+                        RE("label", { style: { flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: 62, cursor: "pointer" } }, RE("span", { style: Object.assign({}, glass, { width: 54, height: 54, borderRadius: 27, fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center" }, fx === "img" ? { background: "#fff", color: "#000" } : {}) }, "🖼️"), RE("span", { style: { fontSize: 10.5, opacity: 0.85 } }, "Mon image"), RE("input", { type: "file", accept: "image/*", style: { position: "absolute", width: 1, height: 1, opacity: 0 }, onChange: (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const im = new Image(); im.onload = () => { imgFx.current = im; pickFx("img"); }; im.src = URL.createObjectURL(f); } })),
+                        FACE_FX.map((f) => RE("button", { key: f[0], onClick: () => pickFx(f[0]), "aria-label": f[1], "aria-pressed": fx === f[0], style: { flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: 62 } },
+                            RE("span", { style: Object.assign({}, glass, { position: "relative", width: 54, height: 54, borderRadius: 27, fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform .15s" }, fx === f[0] ? { transform: "scale(1.12)", border: "2px solid #fff", background: "rgba(255,255,255,.3)" } : {}) }, f[2], LOCKED_FX.indexOf(f[0]) !== -1 && !plus && RE("span", { style: { position: "absolute", right: -3, top: -3, fontSize: 12 } }, "⭐")),
+                            RE("span", { style: { fontSize: 10.5, opacity: fx === f[0] ? 1 : 0.7, fontWeight: fx === f[0] ? 700 : 400 } }, f[1]))))),
+                panel === "fl" && RE("div", { className: "fcScroll", style: { animation: "fcIn .2s ease", display: "flex", gap: 10, overflowX: "auto", padding: "4px 16px 12px" } },
+                    STORY_FILTERS.map((f) => RE("button", { key: f[0], onClick: () => { setFl(f[0]); setToast(f[1]); }, "aria-pressed": fl === f[0], style: { flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: 62 } },
+                        RE("span", { style: { width: 54, height: 54, borderRadius: 16, background: "linear-gradient(135deg,#f6d365,#fda085 45%,#a1c4fd)", filter: fcss(f[0]) || "none", border: fl === f[0] ? "3px solid #fff" : "2px solid rgba(255,255,255,.2)", transition: "border .15s" } }),
+                        RE("span", { style: { fontSize: 10.5, fontWeight: fl === f[0] ? 700 : 400, opacity: fl === f[0] ? 1 : 0.7 } }, f[1])))),
+                RE("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-around", padding: "0 18px" } },
+                    RE("label", { "aria-label": "Importer une vidéo", style: Object.assign({}, glass, { width: 54, height: 54, borderRadius: 16, fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", opacity: rd ? 0.4 : 1, pointerEvents: rd ? "none" : "auto" }) }, "🎞️", RE("input", { type: "file", accept: "video/*", onChange: importFile, style: { position: "absolute", width: 1, height: 1, opacity: 0 } })),
+                    RE("button", { onClick: press, "aria-label": rd ? "Arrêter l'enregistrement" : cd > 0 ? "Annuler le minuteur" : "Enregistrer", style: { position: "relative", width: 88, height: 88, display: "flex", alignItems: "center", justifyContent: "center" } },
+                        RE("svg", { width: 88, height: 88, viewBox: "0 0 88 88", style: { position: "absolute", inset: 0, transform: "rotate(-90deg)" } },
+                            RE("circle", { cx: 44, cy: 44, r: 38, fill: "none", stroke: "rgba(255,255,255,.35)", strokeWidth: 5 }),
+                            RE("circle", { cx: 44, cy: 44, r: 38, fill: "none", stroke: "#ff4d6d", strokeWidth: 5, strokeLinecap: "round", strokeDasharray: C, strokeDashoffset: C * (1 - (rd ? Math.min(1, sec / mx) : 0)), style: { transition: "stroke-dashoffset 1s linear" } })),
+                        RE("span", { style: { width: rd ? 30 : 64, height: rd ? 30 : 64, borderRadius: rd ? 9 : 32, background: rd ? "#ff3b4e" : "#fff", transition: "all .2s ease", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: "#000" } }, cd > 0 ? cd : "")),
+                    RE("button", { onClick: () => setPanel(panel === "fx" ? null : "fx"), "aria-label": "Effets", "aria-pressed": panel === "fx", style: Object.assign({}, glass, { width: 54, height: 54, borderRadius: 16, fontSize: 24, opacity: rd ? 0.4 : 1, pointerEvents: rd ? "none" : "auto" }, panel === "fx" ? { background: "#fff", color: "#000" } : {}) }, fx === "none" ? "✨" : (FACE_FX.filter((q) => q[0] === fx)[0] || [0, 0, "🖼️"])[2])),
+                !rd && RE("div", { style: { display: "flex", justifyContent: "center", gap: 8, marginTop: 12 } },
+                    [["fx", "✨ Effets"], ["fl", "🎨 Filtres"]].map((p) => RE("button", { key: p[0], onClick: () => setPanel(panel === p[0] ? null : p[0]), "aria-pressed": panel === p[0], style: Object.assign({}, glass, { borderRadius: 999, padding: "7px 16px", fontSize: 12.5, fontWeight: 700 }, panel === p[0] ? { background: "#fff", color: "#000" } : {}) }, p[1])),
+                    RE("span", { style: { alignSelf: "center", fontSize: 11.5, opacity: 0.6, marginLeft: 4 } }, "Glisse l'image pour changer d'effet"))));
 }
 function FluxTab({ me, feed, flash }) {
     const [all, setAll] = React.useState(null), [n, setN] = React.useState(6), [cur, setCur] = React.useState(0), [filt, setFilt] = React.useState("all"), [cam, setCam] = React.useState(false), [ver, setVer] = React.useState(0);
