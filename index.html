@@ -43,6 +43,9 @@ input:focus,textarea:focus{outline:none;border-color:var(--accent)!important;box
 @keyframes wFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-25px)}}
 .wLogo{animation:wBob 3.5s ease-in-out infinite}
 @keyframes wBob{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-8px) rotate(3deg)}}
+html.hc{filter:contrast(1.22) saturate(1.05)}
+html.hc button,html.hc input,html.hc textarea{border-width:2px}
+html.rm *,html.rm *::before,html.rm *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 </style>
 </head>
 <body>
@@ -905,25 +908,63 @@ function ForwardModal({ me, msg, onClose, onDone }) {
             t.isGroup ? " · groupe" : ""),
         busy === t.id && React.createElement(Loader2, { size: 15, className: "animate-spin" }))))));
 }
+function parsePins(raw) { if (!raw) return []; if (raw.charAt(0) === "[") { try { const a = JSON.parse(raw); return Array.isArray(a) ? a.filter(Boolean) : []; } catch (e) { return []; } } return [raw]; }
+function pinAdd(list, mid, max) { const l = list.filter((x) => x !== mid); l.push(mid); return l.slice(-(max || 5)); }
+function filterMessages(list, q, from, to) {
+    const ql = String(q || "").trim().toLowerCase(), f = from ? new Date(from + "T00:00:00").getTime() : 0, t = to ? new Date(to + "T23:59:59.999").getTime() : Infinity;
+    return (list || []).filter((m) => m && !m.deleted && m.type !== "system" && m.type !== "calllog" && m.ts >= f && m.ts <= t && (!ql || [m.content, m.cap, m.tr].some((v) => typeof v === "string" && v.indexOf("data:") !== 0 && v.toLowerCase().indexOf(ql) !== -1))).sort((a, b) => b.ts - a.ts);
+}
+function computePeaks(d, n) { const out = [], step = Math.max(1, Math.floor(d.length / n)); let mx = 0.0001; for (let i = 0; i < n; i++) { let m = 0; for (let j = i * step; j < Math.min(d.length, (i + 1) * step); j++) { const a = Math.abs(d[j]); if (a > m) m = a; } out.push(m); if (m > mx) mx = m; } return out.map((v) => v / mx); }
+const WV_CACHE = {};
 function VoiceMsg({ m }) {
-    const ref = useRef(null);
-    const [rate, setRate] = useState(1);
-    const [showTr, setShowTr] = useState(false);
-    const cycle = () => { const n = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1; setRate(n); if (ref.current)
-        ref.current.playbackRate = n; };
+    const ref = useRef(null), key = m.id || String((m.content || "").length);
+    const [rate, setRate] = useState(1), [showTr, setShowTr] = useState(false), [peaks, setPeaks] = useState(WV_CACHE[key] || null), [pos, setPos] = useState(0), [playing, setPlaying] = useState(false);
+    useEffect(() => {
+        if (peaks) return; let ok = true;
+        (async () => {
+            try { const buf = await (await fetch(m.content)).arrayBuffer(), ctx = new (window.AudioContext || window.webkitAudioContext)(), ab = await ctx.decodeAudioData(buf), p = computePeaks(ab.getChannelData(0), 36); try { ctx.close(); } catch (e) { } WV_CACHE[key] = p; if (ok) setPeaks(p); }
+            catch (e) { if (ok) setPeaks(Array.from({ length: 36 }, (_, i) => 0.3 + 0.5 * Math.abs(Math.sin(i * 1.7)))); }
+        })();
+        return () => { ok = false; };
+    }, []);
+    const dd = () => { const a = ref.current; return a && isFinite(a.duration) && a.duration > 0 ? a.duration : (m.dur || 0); };
+    const cycle = () => { const n = rate === 1 ? 1.5 : rate === 1.5 ? 2 : 1; setRate(n); if (ref.current) ref.current.playbackRate = n; };
+    const toggle = () => { const a = ref.current; if (!a) return; if (a.paused) { a.playbackRate = rate; a.play().catch(() => { }); } else a.pause(); };
+    const seek = (e) => { const a = ref.current, d = dd(); if (!a || !d) return; const r = e.currentTarget.getBoundingClientRect(); a.currentTime = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * d; setPos(a.currentTime / d); };
     return (React.createElement("div", { onClick: (e) => e.stopPropagation() },
-        React.createElement("audio", { ref: ref, controls: true, src: m.content, onPlay: () => { if (ref.current)
-                ref.current.playbackRate = rate; }, style: { height: 36, maxWidth: "100%" } }),
+        React.createElement("audio", { ref: ref, src: m.content, preload: "metadata", onTimeUpdate: () => { const d = dd(); if (d && ref.current) setPos(Math.min(1, ref.current.currentTime / d)); }, onPlay: () => setPlaying(true), onPause: () => setPlaying(false), onEnded: () => { setPlaying(false); setPos(0); }, style: { display: "none" } }),
+        React.createElement("div", { className: "flex items-center gap-2" },
+            React.createElement("button", { onClick: toggle, "aria-label": playing ? "Pause" : "Lecture", style: { width: 32, height: 32, borderRadius: 16, background: "rgba(0,0,0,0.2)", flexShrink: 0, fontSize: 13 } }, playing ? "⏸" : "▶"),
+            React.createElement("div", { onClick: seek, role: "slider", "aria-label": "Position du vocal", style: { display: "flex", alignItems: "center", gap: 2, height: 30, flex: 1, minWidth: 120, cursor: "pointer" } }, (peaks || []).map((v, i) => React.createElement("span", { key: i, style: { flex: 1, minWidth: 2, height: Math.max(3, Math.round(v * 28)), borderRadius: 2, background: "currentColor", opacity: i / peaks.length < pos ? 1 : 0.35 } })))),
         React.createElement("div", { className: "flex items-center gap-2 mt-0.5 text-[10px]" },
-            m.dur ? React.createElement("span", { className: "opacity-60" },
-                "\uD83C\uDFA4 ",
-                m.dur,
-                " s") : null,
-            React.createElement("button", { onClick: cycle, className: "rounded-full px-2 py-0.5 font-semibold", style: { background: "rgba(0,0,0,0.18)" } },
-                "\u00D7",
-                rate),
+            m.dur ? React.createElement("span", { className: "opacity-60" }, "🎤 ", m.dur, " s") : null,
+            React.createElement("button", { onClick: cycle, className: "rounded-full px-2 py-0.5 font-semibold", style: { background: "rgba(0,0,0,0.18)" } }, "×", rate),
             m.tr ? React.createElement("button", { onClick: () => setShowTr((v) => !v), className: "underline opacity-80" }, showTr ? "Masquer le texte" : "Voir le texte") : null),
         showTr && m.tr && React.createElement("div", { className: "text-xs mt-1 rounded-lg px-2 py-1", style: { background: "rgba(0,0,0,0.15)" } }, m.tr)));
+}
+function GlobalSearch({ me, contacts, onOpen, onClose }) {
+    useBack(true, onClose);
+    const [q, setQ] = useState(""), [from, setFrom] = useState(""), [to, setTo] = useState(""), [res, setRes] = useState(null), [busy, setBusy] = useState(false), [prog, setProg] = useState("");
+    const go = async () => {
+        if (!q.trim() && !from && !to) return; setBusy(true); const out = [];
+        for (let i = 0; i < contacts.length; i++) {
+            const c = contacts[i]; setProg((i + 1) + " / " + contacts.length);
+            try { const raw = await safeGet("conv:" + (c.isGroup ? c.id : convId(me.id, c.id)), true); if (!raw) continue; const parsed = JSON.parse(raw), list = c.isGroup ? parsed : await convDecode(parsed, me.id, c.id); filterMessages(list, q, from, to).slice(0, 20).forEach((m) => out.push({ c, m })); } catch (e) { }
+        }
+        out.sort((a, b) => b.m.ts - a.m.ts); setRes(out.slice(0, 150)); setBusy(false); setProg("");
+    };
+    const inp = { background: "var(--card)", color: "var(--fg)", border: "1px solid var(--line)" };
+    return React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 88, background: "var(--bg)", color: "var(--fg)", display: "flex", flexDirection: "column" } },
+        React.createElement("div", { className: "flex items-center justify-between p-4" }, React.createElement("div", { className: "font-semibold text-lg" }, "🔎 Recherche dans les messages"), React.createElement("button", { onClick: onClose, className: "text-xl" }, "✕")),
+        React.createElement("div", { className: "px-4" },
+            React.createElement("input", { value: q, onChange: (e) => setQ(e.target.value), onKeyDown: (e) => e.key === "Enter" && go(), placeholder: "Mot ou phrase (toutes les discussions)", className: "w-full rounded-full px-4 py-2.5 text-sm mb-2", style: inp }),
+            React.createElement("div", { className: "flex gap-2 mb-2 items-center text-xs" }, "Du", React.createElement("input", { type: "date", value: from, onChange: (e) => setFrom(e.target.value), className: "flex-1 rounded-xl px-2 py-2", style: inp }), "au", React.createElement("input", { type: "date", value: to, onChange: (e) => setTo(e.target.value), className: "flex-1 rounded-xl px-2 py-2", style: inp })),
+            React.createElement("button", { onClick: go, disabled: busy, className: "w-full rounded-2xl py-3 text-sm font-semibold mb-2", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "Recherche… " + prog : "Rechercher")),
+        React.createElement("div", { className: "flex-1 overflow-y-auto px-4 pb-6" }, res && (res.length === 0 ? React.createElement("div", { className: "text-sm text-center pt-6", style: { color: "var(--muted)" } }, "Aucun message trouvé.") : res.map((r, i) => React.createElement("button", { key: i, onClick: () => { onClose(); onOpen(r.c); }, className: "w-full text-left rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, React.createElement("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, (r.c.isGroup ? "👥 " : "") + r.c.pseudo + " · " + new Date(r.m.ts).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })), (typeof r.m.content === "string" && r.m.content.indexOf("data:") !== 0 ? r.m.content : (r.m.cap || r.m.tr || "[média]")).slice(0, 140))))));
+}
+function GsButton({ me, contacts, onOpenChat }) {
+    const [o, setO] = useState(false);
+    return React.createElement("div", { className: "px-4 pt-3" }, React.createElement("button", { onClick: () => setO(true), className: "w-full rounded-full px-4 py-2.5 text-sm text-left", style: { background: "var(--card)", color: "var(--muted)", border: "1px solid var(--line)" } }, "🔎 Rechercher dans tous les messages…"), o && React.createElement(GlobalSearch, { me, contacts, onOpen: onOpenChat, onClose: () => setO(false) }));
 }
 function LocShareSheet({ other, onSendNow, onShare, onClose }) {
     return (React.createElement(Sheet, { title: "\uD83D\uDCCD Position", onClose: onClose },
@@ -2407,8 +2448,12 @@ const AVATAR_PALETTE = [
     "#2DD4BF", "#FF6B5D", "#E8A33D", "#8B7FD9", "#4EA1D3", "#E86BA0",
 ];
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const APP_VERSION = "5.4.1";
+const APP_VERSION = "5.4.3.2";
 const NEWS = [
+    ["💬", "Messagerie : vocaux, recherche, épingles", "Forme d'onde sur les vocaux, recherche dans toutes les discussions et par date, jusqu'à 5 messages épinglés par conversation. Page de tests intégrée (Profil > Sécurité & données)."],
+    ["🎬", "Vidéos : texte, stickers, musique", "Ajoute du texte et des stickers déplaçables, découpe ta vidéo, mets une musique (ton fichier ou une ambiance générée) et suis l'envoi avec une barre de progression. Épingle tes vidéos « À la une »."],
+    ["🔐", "Sécurité & données", "Phrase de secours, sauvegarde et restauration du compte, visite guidée, contrastes renforcés, animations réduites et interface en anglais (Profil > Sécurité & données)."],
+    ["⭐", "Plus s'enrichit", "Couleurs d'accent exclusives, qui a aimé tes vidéos et nombre de vues."],
     ["🎥", "Nouvelle caméra vidéo", "Tout le studio est redessiné : minuteur, zoom, grille, lampe torche, anneau de progression, effets et filtres en carrousel, aperçu plein écran avant de publier."],
     ["✨", "Nouveau design", "Barre de navigation en verre, boutons plus doux, animations et Flux plus lisible."],
     ["🎬", "Flux amélioré", "Onglet Enregistrés, vidéos non vues en premier, réponses aux commentaires, signalement de vidéos, nouveaux filtres Chat et Moustache."],
@@ -2989,6 +3034,7 @@ function SignUp({ onBack, onDone }) {
         React.createElement("button", { onClick: submit, disabled: busy, className: "w-full rounded-2xl py-4 text-base font-semibold flex items-center justify-center gap-2 disabled:opacity-60 mt-1", style: { background: "linear-gradient(135deg, var(--accent), " + cm("var(--accent)", 78, "#3B82F6") + ")", color: "var(--on-accent)", boxShadow: "0 8px 22px -8px " + cm("var(--accent)", 65, "transparent") + "" } }, busy ? React.createElement(Loader2, { size: 18, className: "animate-spin" }) : "Créer mon compte")));
 }
 function SignIn({ onBack, onDone }) {
+    const [recOpen, setRecOpen] = useState(false);
     const [step, setStep] = useState("form");
     const [codeInput, setCodeInput] = useState("");
     const [password, setPassword] = useState("");
@@ -3073,6 +3119,8 @@ function SignIn({ onBack, onDone }) {
         React.createElement(PasswordField, { value: password, onChange: (e) => setPassword(e.target.value), onKeyDown: (e) => e.key === "Enter" && submit(), placeholder: "ton mot de passe", autoComplete: "current-password" }),
         err && React.createElement("p", { className: "text-sm mb-3", style: { color: "#FF6B5D" } }, err),
         React.createElement("button", { onClick: submit, disabled: busy, className: "w-full rounded-2xl py-4 text-base font-semibold flex items-center justify-center gap-2 disabled:opacity-60 mt-1", style: { background: "linear-gradient(135deg, var(--accent), " + cm("var(--accent)", 78, "#3B82F6") + ")", color: "var(--on-accent)", boxShadow: "0 8px 22px -8px " + cm("var(--accent)", 65, "transparent") + "" } }, busy ? React.createElement(Loader2, { size: 18, className: "animate-spin" }) : "Se connecter"),
+        React.createElement("button", { onClick: () => setRecOpen(true), className: "text-sm mt-4 underline", style: { color: "var(--muted)" } }, "Mot de passe oublié ?"),
+        recOpen && React.createElement(RecoverySheet, { onClose: () => setRecOpen(false) }),
         React.createElement(SupportButton, null)));
 }
 const RE = React.createElement;
@@ -3321,11 +3369,11 @@ const FACE_FX = [["none", "Aucun", "🚫"], ["lun", "Lunettes", "😎"], ["cou",
 const LOCKED_FX = ["cou", "fle", "eto", "vhs", "cin", "img"];
 function blobToB64(b) { return new Promise((ok) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.readAsDataURL(b); }); }
 function b64ToBlob(s, t) { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return new Blob([a], { type: t }); }
-async function postVideo(me, blob, meta) {
+async function postVideo(me, blob, meta, onP) {
     const id = "v" + Date.now() + Math.random().toString(36).slice(2, 6), n = Math.ceil(blob.size / VCH);
-    for (let i = 0; i < n; i++) { if (!(await safeSet("vc:" + id + ":" + i, await blobToB64(blob.slice(i * VCH, (i + 1) * VCH)), true))) return false; }
+    for (let i = 0; i < n; i++) { if (!(await safeSet("vc:" + id + ":" + i, await blobToB64(blob.slice(i * VCH, (i + 1) * VCH)), true))) return false; if (onP) onP((i + 1) / (n + 1)); }
     const old = parseList(await safeGet("vlist:" + me.id, true));
-    const list = old.filter((v) => v && (!v.st || Date.now() - v.ts < (v.x2 ? 1728e5 : 864e5)));
+    const list = old.filter((v) => v && (!v.st || v.hl || Date.now() - v.ts < (v.x2 ? 1728e5 : 864e5)));
     for (const v of old) if (v && list.indexOf(v) === -1) for (let i = 0; i < (v.n || 0); i++) await safeDelete("vc:" + v.id + ":" + i, true);
     if (!meta.dur) meta.dur = await videoDur(blob);
     list.push(Object.assign({ id, ts: Date.now(), n, mt: blob.type }, meta));
@@ -3341,7 +3389,7 @@ async function loadFluxAll(me, feed) {
     const names = {}; ((feed && feed.groups) || []).forEach((g) => { names[g.uid] = g.first || g.pseudo; }); names[me.id] = me.pseudo;
     const out = [];
     await Promise.all(ids.map(async (uid) => {
-        const l = parseList(await safeGet("vlist:" + uid, true)).filter((v) => v && (!v.st || Date.now() - v.ts < (v.x2 ? 1728e5 : 864e5)));
+        const l = parseList(await safeGet("vlist:" + uid, true)).filter((v) => v && (!v.st || v.hl || Date.now() - v.ts < (v.x2 ? 1728e5 : 864e5)));
         const pp = plusOk(await safeGet("plus:" + uid, true));
         l.forEach((v) => out.push(Object.assign({}, v, { uid, who: names[uid] || "Ami", kind: "vid", pl: pp })));
     }));
@@ -3378,17 +3426,39 @@ function FluxCard({ me, x, active, flash, onDel }) {
     const [pl, setPl] = React.useState(false), [myPlus, setMyPlus] = React.useState(true);
     React.useEffect(() => { safeGet("plus:" + me.id, true).then((r) => setMyPlus(plusOk(r))); }, []);
     React.useEffect(() => { safeGet("plus:" + x.uid, true).then((r) => setPl(plusOk(r))); }, [x.uid]);
+    const [views, setViews] = React.useState(0);
+    React.useEffect(() => { if (x.kind !== "vid") return; if (active && x.uid !== me.id) safeSet("vv:" + x.id + ":" + me.id, "1", true); if (x.uid === me.id && myPlus) safeList("vv:" + x.id + ":").then((k) => setViews(k.length)); }, [active, myPlus]);
+    const showLikers = async () => { if (!myPlus) { flash("⭐ Voir qui a aimé : réservé à Plus"); return; } const ks = await safeList("vl:" + x.id + ":"); const ns = await Promise.all(ks.slice(0, 8).map((k) => nameOf(k.split(":").pop()))); flash(ns.length ? "❤️ " + ns.join(", ") + (ks.length > 8 ? "…" : "") : "Aucun j'aime pour l'instant"); };
+    const [hlOn, setHlOn] = React.useState(!!x.hl);
+    const toggleHl = async () => { const l = parseList(await safeGet("vlist:" + me.id, true)), v = l.filter((q) => q.id === x.id)[0]; if (!v) return; if (!v.hl && !myPlus && l.filter((q) => q.hl).length >= 3) { flash("⭐ Limite de 3 vidéos « À la une » : Plus = illimité"); return; } v.hl = v.hl ? 0 : 1; await safeSet("vlist:" + me.id, JSON.stringify(l), true); setHlOn(!!v.hl); flash(v.hl ? "📌 Ajoutée à « À la une »" : "Retirée de « À la une »"); };
     const long = x.kind === "vid" && x.lg, it = x.it;
     return RE("div", { className: "fluxCard", style: { height: "100%", scrollSnapAlign: "start", scrollSnapStop: "always", position: "relative", background: "#000", color: "#fff", overflow: "hidden" } },
         x.kind === "vid" && (url ? RE("video", { ref: vr, src: url, loop: true, playsInline: true, controls: !!long, onClick: (e) => { if (!long) { const v = e.currentTarget; v.paused ? v.play() : v.pause(); } }, style: { width: "100%", height: "100%", objectFit: long ? "contain" : "cover" } }) : RE("div", { className: "flex h-full items-center justify-center text-sm opacity-70" }, err ? "Vidéo indisponible" : "Chargement…")),
         x.kind === "story" && (it.k === "img" ? RE("img", { src: it.c, alt: "", style: { width: "100%", height: "100%", objectFit: "cover", filter: fcss(it.fl) } }) : RE("div", { className: "flex h-full items-center justify-center p-8 text-center text-2xl", style: Object.assign({ background: "linear-gradient(160deg,#1d4e89,#7b2d8e)" }, storyTxt(it)) }, it.c)),
         RE("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "40px 16px 18px", background: "linear-gradient(transparent,rgba(0,0,0,.65))", pointerEvents: "none" } },
-            RE("div", { className: "font-semibold" }, x.who, pl ? " ⭐" : "", x.kind === "story" ? " · story" : x.st ? " · story vidéo" : long ? " · vidéo longue" : "", RE("span", { className: "opacity-70 font-normal" }, " · " + timeAgoShort(x.ts))),
+            RE("div", { className: "font-semibold" }, x.who, pl ? " ⭐" : "", x.hl ? " 📌" : "", x.kind === "story" ? " · story" : x.st ? " · story vidéo" : long ? " · vidéo longue" : "", RE("span", { className: "opacity-70 font-normal" }, " · " + timeAgoShort(x.ts))),
             RE("div", { className: "text-sm mt-1" }, x.title || x.cap || (it && it.cap) || "")),
         x.kind === "vid" && RE("div", { style: { position: "absolute", right: 12, bottom: long ? 80 : 90, display: "flex", flexDirection: "column", gap: 14, alignItems: "center" } },
-            RE("button", { onClick: like, className: "text-3xl", style: { filter: "drop-shadow(0 1px 4px #000)" } }, liked ? "❤️" : "🤍"), RE("span", { className: "text-xs -mt-3" }, likes),
-            RE("button", { onClick: () => setCm(true), className: "text-2xl" }, "💬"), RE("button", { onClick: save, className: "text-2xl" }, sv ? "🔖" : "📑"), RE("button", { onClick: share, className: "text-2xl" }, "↗️"), x.uid !== me.id && RE("button", { onClick: report, className: "text-xl" }, "🚩"), x.uid === me.id && RE("button", { onClick: () => onDel(x), className: "text-xl" }, "🗑️")),
+            RE("button", { onClick: like, className: "text-3xl", style: { filter: "drop-shadow(0 1px 4px #000)" } }, liked ? "❤️" : "🤍"), RE("span", { className: "text-xs -mt-3", onClick: showLikers, style: { cursor: "pointer" } }, likes), x.uid === me.id && RE("span", { className: "text-xs" }, myPlus ? "👁 " + views : "👁 ⭐"),
+            RE("button", { onClick: () => setCm(true), className: "text-2xl" }, "💬"), RE("button", { onClick: save, className: "text-2xl" }, sv ? "🔖" : "📑"), RE("button", { onClick: share, className: "text-2xl" }, "↗️"), x.uid !== me.id && RE("button", { onClick: report, className: "text-xl" }, "🚩"), x.uid === me.id && RE("button", { onClick: toggleHl, className: "text-xl" }, hlOn ? "📌" : "📍"), x.uid === me.id && RE("button", { onClick: () => onDel(x), className: "text-xl" }, "🗑️")),
         cm && RE(CommentsSheet, { me, x, flash, onClose: () => setCm(false) }));
+}
+const VID_STICKERS = ["😂", "😍", "🔥", "💯", "🎉", "👑", "💖", "😎", "🌈", "⭐", "🎵", "👀"];
+function makeMusic(ctx, dest, kind, buf) {
+    const g = ctx.createGain(); g.gain.value = 0.35; g.connect(dest);
+    if (kind === "file" && buf) { const sr = ctx.createBufferSource(); sr.buffer = buf; sr.loop = true; sr.connect(g); sr.start(); return () => { try { sr.stop(); } catch (e) { } }; }
+    const tone = (f, t0, d, type, vol) => { const o = ctx.createOscillator(), e = ctx.createGain(); o.type = type; o.frequency.value = f; e.gain.setValueAtTime(0.0001, t0); e.gain.linearRampToValueAtTime(vol, t0 + 0.02); e.gain.exponentialRampToValueAtTime(0.0001, t0 + d); o.connect(e); e.connect(g); o.start(t0); o.stop(t0 + d + 0.05); };
+    const noise = (t0, d, vol) => { const b = ctx.createBuffer(1, Math.floor(ctx.sampleRate * d), ctx.sampleRate), c = b.getChannelData(0); for (let i = 0; i < c.length; i++) c[i] = Math.random() * 2 - 1; const sr = ctx.createBufferSource(), e = ctx.createGain(), f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 6000; sr.buffer = b; e.gain.setValueAtTime(vol, t0); e.gain.exponentialRampToValueAtTime(0.0001, t0 + d); sr.connect(f); f.connect(e); e.connect(g); sr.start(t0); };
+    let step = 0, stopped = false; const bpm = kind === "energy" ? 122 : kind === "retro" ? 100 : 60, beat = 60 / bpm;
+    const sched = () => {
+        if (stopped) return; const t = ctx.currentTime + 0.05;
+        if (kind === "calm") { if (step % 4 === 0) [[261.6, 329.6, 392], [220, 277.2, 329.6], [174.6, 220, 261.6], [196, 246.9, 293.7]][(step / 4) % 4].forEach((f) => tone(f, t, beat * 4, "sine", 0.12)); }
+        else if (kind === "energy") { if (step % 2 === 0) tone(110, t, 0.18, "sine", 0.5); noise(t + beat / 2, 0.05, 0.12); if (step % 4 === 2) tone(220 * (1 + ((step / 4) % 2) * 0.19), t, beat, "sawtooth", 0.07); }
+        else { const sc = [261.6, 329.6, 392, 523.2, 392, 329.6]; tone(sc[step % 6], t, beat * 0.9, "square", 0.07); if (step % 4 === 0) tone(65.4, t, beat * 2, "triangle", 0.25); }
+        step++;
+    };
+    sched(); const iv = setInterval(sched, beat * 1000);
+    return () => { stopped = true; clearInterval(iv); try { g.disconnect(); } catch (e) { } };
 }
 function FluxCamera({ me, onClose, onPosted, flash }) {
     useBack(true, onClose);
@@ -3400,6 +3470,9 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
     useBack(!!res, () => setRes(null));
     const mx = (mode === "story" ? VSTORY_MAX : VLONG_MAX) * mul;
     const vert = mode === "story";
+    const ovl = React.useRef([]);
+    const [mus, setMus] = React.useState("none"), [musFile, setMusFile] = React.useState(null), [t0, setT0] = React.useState(0), [t1, setT1] = React.useState(0), [prog, setProg] = React.useState(0), [, tk] = React.useState(0);
+    React.useEffect(() => { const D = res ? (rdur || sec) : 0; setT0(0); setT1(D); }, [rdur, res]);
     React.useEffect(() => {
         let alive = true, stream = null, raf = 0, k = 0;
         setReady(false); setTorchOk(false); setTorch(false);
@@ -3422,6 +3495,7 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
                     face.current = { x: o.x + (rw.x - o.x) * 0.45, y: o.y + (rw.y - o.y) * 0.45, w: o.w + (rw.w - o.w) * 0.45 };
                     if (fid === "bea") { g.fillStyle = "rgba(255,214,200,.16)"; g.fillRect(0, 0, W, H); } else if (fid === "vhs") { g.fillStyle = "rgba(0,0,0,.2)"; for (let yy = 0; yy < H; yy += 4) g.fillRect(0, yy, W, 1.5); g.fillStyle = "rgba(255,0,80,.07)"; g.fillRect(0, 0, W, H); } else if (fid === "cin") { const gr = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7); gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(1, "rgba(0,0,0,.7)"); g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(0, 0, W, H * 0.07); g.fillRect(0, H * 0.93, W, H * 0.07); } else if (fid === "img") { if (imgFx.current) { const q = face.current; g.drawImage(imgFx.current, q.x - q.w * 0.75, q.y - q.w * 0.75, q.w * 1.5, q.w * 1.5); } } else drawFace(g, fid, face.current);
                 }
+                (ovl.current || []).forEach((o) => { g.save(); g.textAlign = "center"; g.textBaseline = "middle"; g.font = (o.k === "t" ? "bold " : "") + Math.round(o.s * W) + "px " + (o.k === "t" ? "sans-serif" : "serif"); if (o.k === "t") { g.lineWidth = Math.round(o.s * W * 0.14); g.lineJoin = "round"; g.strokeStyle = "rgba(0,0,0,.85)"; g.strokeText(o.c, o.x * W, o.y * H); g.fillStyle = "#fff"; } g.fillText(o.c, o.x * W, o.y * H); g.restore(); });
                 raf = requestAnimationFrame(draw);
             }; draw();
         })();
@@ -3432,25 +3506,45 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
     React.useEffect(() => { if (cd <= 0) return; const t = setTimeout(() => { if (cd === 1) { setCd(0); start(); } else setCd(cd - 1); }, 1000); return () => clearTimeout(t); }, [cd]);
     React.useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(""), 1300); return () => clearTimeout(t); }, [toast]);
     React.useEffect(() => { setRdur(0); if (res) videoDur(res).then((d) => setRdur(d || 0)); }, [res]);
-    const start = () => {
+    const start = async () => {
         if (!plus && LOCKED_FX.indexOf(st.current.fx) !== -1) { flash("⭐ Ce filtre est réservé à Sans-Trace Plus (aperçu gratuit, enregistrement Plus)"); return; }
-        const cs = cv.current.captureStream(30), au = st.current.stream.getAudioTracks()[0]; if (au) cs.addTrack(au);
+        const cs = cv.current.captureStream(30); let au = st.current.stream.getAudioTracks()[0]; st.current.stopMus = null; st.current.actx = null;
+        if (mus !== "none") { try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); await ctx.resume(); const dest = ctx.createMediaStreamDestination(); if (au) ctx.createMediaStreamSource(new MediaStream([au])).connect(dest); const buf = mus === "file" && musFile ? await ctx.decodeAudioData(await musFile.arrayBuffer()) : null; st.current.stopMus = makeMusic(ctx, dest, mus, buf); st.current.actx = ctx; au = dest.stream.getAudioTracks()[0]; } catch (e) { flash("Musique indisponible, enregistrement sans musique."); } }
+        if (au) cs.addTrack(au);
         const mt = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].filter((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m))[0];
         if (!mt) { flash("Enregistrement non supporté sur ce navigateur."); return; }
         const ch = []; const r = new MediaRecorder(cs, { mimeType: mt, videoBitsPerSecond: mode === "story" ? 650000 : 420000, audioBitsPerSecond: 48000 });
         r.ondataavailable = (e) => e.data.size && ch.push(e.data); r.onstop = () => { const bl = new Blob(ch, { type: mt.split(";")[0] }); if (bl.size > VTOT * mul) flash("Vidéo trop lourde."); else setRes(bl); };
         r.start(1000); rec.current = r; setSec(0); setRd(true); setPanel(null); try { navigator.vibrate && navigator.vibrate(18); } catch (e) { }
     };
-    const stop = () => { if (rec.current && rec.current.state !== "inactive") rec.current.stop(); setRd(false); };
+    const stop = () => { if (rec.current && rec.current.state !== "inactive") rec.current.stop(); if (st.current.stopMus) { st.current.stopMus(); st.current.stopMus = null; } if (st.current.actx) { try { st.current.actx.close(); } catch (e) { } st.current.actx = null; } setRd(false); };
     const press = () => { if (rd) stop(); else if (cd > 0) setCd(0); else if (tm > 0) { setPanel(null); setCd(tm); } else start(); };
     const importFile = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; if (f.size > VTOT * mul) { flash("Fichier trop lourd (" + 12 * mul + " Mo max)."); return; } setSec(0); setRes(f); };
-    const publish = async () => { setBusy(true); const ok = await postVideo(me, res, mode === "story" ? { st: 1, cap, dur: sec, x2: plus ? 1 : 0 } : { lg: 1, title: cap }); setBusy(false); if (ok) { flash("Vidéo publiée ✅"); onPosted(); } else flash("Échec de l'envoi."); };
+    const publish = async () => { setBusy(true); const ok = await postVideo(me, res, mode === "story" ? { st: 1, cap, dur: Math.round(rdur || sec), x2: plus ? 1 : 0 } : { lg: 1, title: cap }, setProg); setBusy(false); if (ok) { flash("Vidéo publiée ✅"); onPosted(); } else flash("Échec de l'envoi."); };
     const url = React.useMemo(() => res ? URL.createObjectURL(res) : null, [res]);
     const fxName = (id) => (FACE_FX.filter((q) => q[0] === id)[0] || ["", "Mon image"])[1];
     const pickFx = (id) => { setFx(id); setToast(fxName(id)); };
     const mmss = (n) => { n = Math.max(0, Math.round(n || 0)); return Math.floor(n / 60) + ":" + String(n % 60).padStart(2, "0"); };
     const glass = { background: "rgba(22,22,30,.55)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", border: "1px solid rgba(255,255,255,.14)", color: "#fff" };
     const railBtn = (key, icon, label, on, f, sub) => RE("button", { key: key, onClick: f, "aria-label": label, "aria-pressed": !!on, title: label, style: Object.assign({}, glass, { width: 46, height: 46, borderRadius: 23, fontSize: 19, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", transition: "transform .15s, background .15s" }, on ? { background: "#fff", color: "#000", border: "1px solid #fff" } : {}) }, icon, sub ? RE("span", { style: { position: "absolute", right: -3, bottom: -3, minWidth: 18, height: 18, borderRadius: 9, fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#ff5f7e,#ff9a3c)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" } }, sub) : null);
+    const pill = (t, f, on) => RE("button", { key: t, onClick: f, style: Object.assign({}, glass, { flex: "0 0 auto", borderRadius: 999, padding: "9px 16px", fontSize: 13, fontWeight: 700 }, on ? { background: "#fff", color: "#000" } : {}) }, t);
+    const addText = () => { const t = window.prompt("Texte à afficher sur la vidéo"); if (t && t.trim()) { ovl.current.push({ k: "t", c: t.trim().slice(0, 40), x: 0.5, y: 0.3, s: 0.07 }); tk((n) => n + 1); setToast("Glisse le texte pour le placer"); } };
+    const addStk = (e) => { ovl.current.push({ k: "s", c: e, x: 0.5, y: 0.5, s: 0.18 }); tk((n) => n + 1); };
+    const undoOv = () => { ovl.current.pop(); tk((n) => n + 1); };
+    const trim = async () => {
+        const v = document.createElement("video"); v.src = url; v.playsInline = true; v.preload = "auto";
+        await new Promise((ok) => { v.onloadedmetadata = ok; });
+        const capf = v.captureStream || v.mozCaptureStream; if (!capf || !window.MediaRecorder) { flash("Découpage non supporté sur ce navigateur."); return; }
+        setBusy(true); setProg(0); v.currentTime = t0; await new Promise((ok) => { v.onseeked = ok; });
+        const r = new MediaRecorder(capf.call(v), MediaRecorder.isTypeSupported("video/webm") ? { mimeType: "video/webm", videoBitsPerSecond: 600000 } : {}), ch = [];
+        r.ondataavailable = (e) => e.data.size && ch.push(e.data); const done = new Promise((ok) => { r.onstop = ok; });
+        r.start(500); try { await v.play(); } catch (e) { flash("Lecture bloquée."); setBusy(false); return; }
+        await new Promise((ok) => { const iv = setInterval(() => { setProg(Math.min(1, (v.currentTime - t0) / Math.max(1, t1 - t0))); if (v.currentTime >= t1 || v.ended) { clearInterval(iv); ok(); } }, 120); });
+        v.pause(); r.stop(); await done; setSec(Math.round(t1 - t0)); setProg(0); setBusy(false); setRes(new Blob(ch, { type: r.mimeType || "video/webm" })); flash("✂️ Vidéo découpée");
+    };
+    const D = rdur || sec;
+    const trimUi = res && D > 1.5 && RE("div", { style: { marginBottom: 12, fontSize: 12.5 } }, RE("div", { style: { fontWeight: 700, marginBottom: 4 } }, "✂️ Découpage : " + Math.round(t0) + " s → " + Math.round(t1) + " s"), RE("input", { type: "range", min: 0, max: D, step: 0.5, value: t0, "aria-label": "Début", onChange: (e) => setT0(Math.min(+e.target.value, t1 - 1)), style: { width: "100%" } }), RE("input", { type: "range", min: 0, max: D, step: 0.5, value: t1, "aria-label": "Fin", onChange: (e) => setT1(Math.max(+e.target.value, t0 + 1)), style: { width: "100%" } }), (t0 > 0 || t1 < D - 0.4) && pill("✂️ Découper", trim));
+    const progUi = busy && prog > 0 && RE("div", { style: { height: 6, background: "rgba(255,255,255,.2)", borderRadius: 3, marginBottom: 12 } }, RE("div", { style: { height: 6, width: Math.round(prog * 100) + "%", background: "linear-gradient(90deg,#ff5f7e,#ff9a3c)", borderRadius: 3, transition: "width .2s" } }));
     const C = 2 * Math.PI * 38;
     const frame = { position: "relative", overflow: "hidden", borderRadius: 30, background: "#0b0b10", boxShadow: "0 24px 70px -20px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.08)", aspectRatio: vert ? "9 / 16" : "16 / 9", height: vert ? "100%" : "auto", width: vert ? "auto" : "100%", maxWidth: "100%", maxHeight: "100%", transition: "all .25s ease" };
     return RE("div", { style: { position: "fixed", inset: 0, zIndex: 80, color: "#fff", display: "flex", flexDirection: "column", background: "radial-gradient(120% 70% at 50% -10%, #23233a 0%, #08080c 62%)", paddingTop: "env(safe-area-inset-top, 0px)" } },
@@ -3465,7 +3559,7 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
             RE("div", { style: { width: 42 } })),
         /* scène */
         RE("div", { style: { flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 12px" } },
-            RE("div", { style: frame, onTouchStart: (e) => { st.current.tx = e.touches[0].clientX; }, onTouchEnd: (e) => { if (res || rd) return; const d = e.changedTouches[0].clientX - st.current.tx; if (Math.abs(d) > 50) { const i = FACE_FX.findIndex((q) => q[0] === st.current.fx); pickFx(FACE_FX[(Math.max(i, 0) + (d < 0 ? 1 : -1) + FACE_FX.length) % FACE_FX.length][0]); } } },
+            RE("div", { style: frame, onTouchStart: (e) => { st.current.tx = e.touches[0].clientX; st.current.drag = null; if (res) return; const r = e.currentTarget.getBoundingClientRect(), nx = (e.touches[0].clientX - r.left) / r.width, ny = (e.touches[0].clientY - r.top) / r.height; let bi = null, bd = 0.14; (ovl.current || []).forEach((o, i) => { const dd = Math.hypot(o.x - nx, o.y - ny); if (dd < bd) { bd = dd; bi = i; } }); st.current.drag = bi; }, onTouchMove: (e) => { if (st.current.drag == null) return; const r = e.currentTarget.getBoundingClientRect(), o = ovl.current[st.current.drag]; if (o) { o.x = Math.min(1, Math.max(0, (e.touches[0].clientX - r.left) / r.width)); o.y = Math.min(1, Math.max(0, (e.touches[0].clientY - r.top) / r.height)); } }, onTouchEnd: (e) => { if (st.current.drag != null) { st.current.drag = null; return; } if (res || rd) return; const d = e.changedTouches[0].clientX - st.current.tx; if (Math.abs(d) > 50) { const i = FACE_FX.findIndex((q) => q[0] === st.current.fx); pickFx(FACE_FX[(Math.max(i, 0) + (d < 0 ? 1 : -1) + FACE_FX.length) % FACE_FX.length][0]); } } },
                 res ? RE("video", { src: url, autoPlay: true, loop: true, playsInline: true, muted: muted, style: { width: "100%", height: "100%", objectFit: "contain", background: "#000" } }) : RE("canvas", { ref: cv, style: { width: "100%", height: "100%", display: "block" } }),
                 !res && !ready && RE("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10, background: "#0b0b10", fontSize: 13, color: "rgba(255,255,255,.7)" } }, RE("div", { style: { fontSize: 34, animation: "fcPulse 1.2s infinite" } }, "🎥"), "Ouverture de la caméra…"),
                 !res && grid && RE("div", { style: { position: "absolute", inset: 0, pointerEvents: "none", backgroundImage: "linear-gradient(to right, transparent 33.2%, rgba(255,255,255,.28) 33.3%, transparent 33.5%, transparent 66.4%, rgba(255,255,255,.28) 66.6%, transparent 66.8%), linear-gradient(to bottom, transparent 33.2%, rgba(255,255,255,.28) 33.3%, transparent 33.5%, transparent 66.4%, rgba(255,255,255,.28) 66.6%, transparent 66.8%)" } }),
@@ -3482,10 +3576,11 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
                 res && RE("div", { style: { position: "absolute", left: 12, bottom: 12, display: "flex", gap: 6 } }, [mmss(sec || rdur), fmtSize(res.size)].map((t) => RE("span", { key: t, style: Object.assign({}, glass, { borderRadius: 999, padding: "5px 11px", fontSize: 11.5, fontWeight: 700 }) }, t))))),
         /* bas */
         res ? RE("div", { style: Object.assign({}, glass, { borderRadius: "28px 28px 0 0", margin: "10px 0 0", padding: "16px 16px calc(16px + env(safe-area-inset-bottom, 0px))", animation: "fcIn .25s ease", borderBottom: "none" }) },
+            trimUi, progUi,
             RE("input", { value: cap, onChange: (e) => setCap(e.target.value), maxLength: mode === "story" ? 100 : 80, placeholder: mode === "story" ? "Ajoute une légende…" : "Donne un titre à ta vidéo…", "aria-label": mode === "story" ? "Légende" : "Titre", style: { width: "100%", borderRadius: 16, padding: "13px 16px", fontSize: 15, outline: "none", background: "rgba(255,255,255,.12)", color: "#fff", border: "1px solid rgba(255,255,255,.18)", marginBottom: 12 } }),
             RE("div", { style: { display: "flex", gap: 10 } },
                 RE("button", { onClick: () => setRes(null), style: Object.assign({}, glass, { flex: "0 0 auto", borderRadius: 18, padding: "0 20px", height: 52, fontSize: 15, fontWeight: 700 }) }, "↺ Refaire"),
-                RE("button", { disabled: busy, onClick: publish, style: { flex: 1, height: 52, borderRadius: 18, fontSize: 16, fontWeight: 800, color: "#fff", background: "linear-gradient(135deg,#ff5f7e,#ff9a3c)", boxShadow: "0 10px 30px -10px rgba(255,95,126,.7)", opacity: busy ? 0.7 : 1 } }, busy ? "Envoi en cours…" : mode === "story" ? "Publier dans ma story  ➤" : "Publier dans le Flux  ➤")))
+                RE("button", { disabled: busy, onClick: publish, style: { flex: 1, height: 52, borderRadius: 18, fontSize: 16, fontWeight: 800, color: "#fff", background: "linear-gradient(135deg,#ff5f7e,#ff9a3c)", boxShadow: "0 10px 30px -10px rgba(255,95,126,.7)", opacity: busy ? 0.7 : 1 } }, busy ? (prog > 0 ? "Envoi " + Math.round(prog * 100) + " %" : "Envoi en cours…") : mode === "story" ? "Publier dans ma story  ➤" : "Publier dans le Flux  ➤")))
             : RE("div", { style: { padding: "10px 0 calc(14px + env(safe-area-inset-bottom, 0px))" } },
                 panel === "fx" && RE("div", { style: { animation: "fcIn .2s ease", marginBottom: 12 } },
                     RE("div", { className: "fcScroll", style: { display: "flex", gap: 12, overflowX: "auto", padding: "4px 16px 6px", alignItems: "flex-start" } },
@@ -3493,6 +3588,8 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
                         FACE_FX.map((f) => RE("button", { key: f[0], onClick: () => pickFx(f[0]), "aria-label": f[1], "aria-pressed": fx === f[0], style: { flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: 62 } },
                             RE("span", { style: Object.assign({}, glass, { position: "relative", width: 54, height: 54, borderRadius: 27, fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", transition: "transform .15s" }, fx === f[0] ? { transform: "scale(1.12)", border: "2px solid #fff", background: "rgba(255,255,255,.3)" } : {}) }, f[2], LOCKED_FX.indexOf(f[0]) !== -1 && !plus && RE("span", { style: { position: "absolute", right: -3, top: -3, fontSize: 12 } }, "⭐")),
                             RE("span", { style: { fontSize: 10.5, opacity: fx === f[0] ? 1 : 0.7, fontWeight: fx === f[0] ? 700 : 400 } }, f[1]))))),
+                panel === "st" && RE("div", { className: "fcScroll", style: { animation: "fcIn .2s ease", display: "flex", gap: 12, overflowX: "auto", padding: "4px 16px 12px", alignItems: "center" } }, pill("Aa Texte", addText), VID_STICKERS.map((e) => RE("button", { key: e, onClick: () => addStk(e), style: { fontSize: 30, flex: "0 0 auto" } }, e)), pill("↩ Annuler", undoOv)),
+                panel === "mu" && RE("div", { className: "fcScroll", style: { animation: "fcIn .2s ease", display: "flex", gap: 10, overflowX: "auto", padding: "4px 16px 12px", alignItems: "center" } }, [["none", "Aucune"], ["calm", "🌙 Calme"], ["energy", "⚡ Énergie"], ["retro", "🕹️ Rétro"]].map((m) => pill(m[1], () => setMus(m[0]), mus === m[0])), RE("label", { style: Object.assign({}, glass, { flex: "0 0 auto", borderRadius: 999, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }, mus === "file" ? { background: "#fff", color: "#000" } : {}) }, "📁 Mon fichier", RE("input", { type: "file", accept: "audio/*", style: { position: "absolute", width: 1, height: 1, opacity: 0 }, onChange: (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) { setMusFile(f); setMus("file"); setToast("Musique : " + f.name.slice(0, 24)); } } }))),
                 panel === "fl" && RE("div", { className: "fcScroll", style: { animation: "fcIn .2s ease", display: "flex", gap: 10, overflowX: "auto", padding: "4px 16px 12px" } },
                     STORY_FILTERS.map((f) => RE("button", { key: f[0], onClick: () => { setFl(f[0]); setToast(f[1]); }, "aria-pressed": fl === f[0], style: { flex: "0 0 auto", display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: 62 } },
                         RE("span", { style: { width: 54, height: 54, borderRadius: 16, background: "linear-gradient(135deg,#f6d365,#fda085 45%,#a1c4fd)", filter: fcss(f[0]) || "none", border: fl === f[0] ? "3px solid #fff" : "2px solid rgba(255,255,255,.2)", transition: "border .15s" } }),
@@ -3506,7 +3603,7 @@ function FluxCamera({ me, onClose, onPosted, flash }) {
                         RE("span", { style: { width: rd ? 30 : 64, height: rd ? 30 : 64, borderRadius: rd ? 9 : 32, background: rd ? "#ff3b4e" : "#fff", transition: "all .2s ease", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: "#000" } }, cd > 0 ? cd : "")),
                     RE("button", { onClick: () => setPanel(panel === "fx" ? null : "fx"), "aria-label": "Effets", "aria-pressed": panel === "fx", style: Object.assign({}, glass, { width: 54, height: 54, borderRadius: 16, fontSize: 24, opacity: rd ? 0.4 : 1, pointerEvents: rd ? "none" : "auto" }, panel === "fx" ? { background: "#fff", color: "#000" } : {}) }, fx === "none" ? "✨" : (FACE_FX.filter((q) => q[0] === fx)[0] || [0, 0, "🖼️"])[2])),
                 !rd && RE("div", { style: { display: "flex", justifyContent: "center", gap: 8, marginTop: 12 } },
-                    [["fx", "✨ Effets"], ["fl", "🎨 Filtres"]].map((p) => RE("button", { key: p[0], onClick: () => setPanel(panel === p[0] ? null : p[0]), "aria-pressed": panel === p[0], style: Object.assign({}, glass, { borderRadius: 999, padding: "7px 16px", fontSize: 12.5, fontWeight: 700 }, panel === p[0] ? { background: "#fff", color: "#000" } : {}) }, p[1])),
+                    [["fx", "✨ Effets"], ["fl", "🎨 Filtres"], ["st", "😀 Texte & stickers"], ["mu", "🎵 Musique" + (mus !== "none" ? " ✓" : "")]].map((p) => RE("button", { key: p[0], onClick: () => setPanel(panel === p[0] ? null : p[0]), "aria-pressed": panel === p[0], style: Object.assign({}, glass, { borderRadius: 999, padding: "7px 16px", fontSize: 12.5, fontWeight: 700 }, panel === p[0] ? { background: "#fff", color: "#000" } : {}) }, p[1])),
                     RE("span", { style: { alignSelf: "center", fontSize: 11.5, opacity: 0.6, marginLeft: 4 } }, "Glisse l'image pour changer d'effet"))));
 }
 function FluxTab({ me, feed, flash }) {
@@ -3516,7 +3613,7 @@ function FluxTab({ me, feed, flash }) {
     React.useEffect(() => { safeGet("vsave", false).then((r) => setSids(parseList(r))); }, [filt]);
     React.useEffect(() => { loadFluxAll(me, feed).then(setAll); }, [feed, ver]);
     React.useEffect(() => { if (!all) return; (async () => { let L = 0, C = 0; for (const x of all) if (x.kind === "vid" && x.uid === me.id) { L += (await safeList("vl:" + x.id + ":")).length; C += (await safeList("vm:" + x.id + ":")).length; } const p = parseObj(await safeGet("vnotif", false)); if (p.l !== undefined && (L > p.l || C > p.c)) flash("🔔 " + Math.max(0, L - p.l) + " j'aime · " + Math.max(0, C - p.c) + " commentaire(s) sur tes vidéos"); await safeSet("vnotif", JSON.stringify({ l: L, c: C }), false); })(); }, [!all]);
-    const base = (all || []).filter((x) => filt === "saved" ? sids.indexOf(x.id) !== -1 : (filt === "all" || (filt === "long" ? x.lg : !x.lg)));
+    const base = (all || []).filter((x) => filt === "hl" ? !!x.hl : filt === "saved" ? sids.indexOf(x.id) !== -1 : (filt === "all" || (filt === "long" ? x.lg : !x.lg)));
     const items = []; if (base.length) for (let i = 0; i < n; i++) { const x = base[i % base.length]; if (!myPlus && i > 0 && i % 8 === 0) items.push({ kind: "promo", key: "pr" + i, id: "pr" + i });
         items.push(Object.assign({}, x, { key: x.id + "_" + Math.floor(i / base.length) + "_" + i })); }
     const onScroll = (e) => { const h = e.currentTarget.clientHeight, i = Math.round(e.currentTarget.scrollTop / h); if (i !== cur) setCur(i); if (i >= n - 3) setN(n + 6); };
@@ -3525,7 +3622,7 @@ function FluxTab({ me, feed, flash }) {
         ps && RE(PlusSheet, { me, flash, onClose: () => setPs(false) }),
         cam && RE(FluxCamera, { me, flash, onClose: () => setCam(false), onPosted: () => { setCam(false); setVer(ver + 1); } }),
         RE("div", { className: "absolute left-0 right-0 top-0 z-10 flex items-center justify-between p-3", style: { color: "#fff" } },
-            RE("div", { className: "flex gap-2" }, [["all", "Pour toi"], ["short", "Courtes"], ["long", "Longues"], ["saved", "📑"]].map((f) => RE("button", { key: f[0], onClick: () => { setFilt(f[0]); setCur(0); setN(6); if (box.current) box.current.scrollTop = 0; }, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: filt === f[0] ? "#fff" : "rgba(0,0,0,.4)", color: filt === f[0] ? "#000" : "#fff" } }, f[1]))),
+            RE("div", { className: "flex gap-2" }, [["all", "Pour toi"], ["short", "Courtes"], ["long", "Longues"], ["saved", "📑"], ["hl", "📌 À la une"]].map((f) => RE("button", { key: f[0], onClick: () => { setFilt(f[0]); setCur(0); setN(6); if (box.current) box.current.scrollTop = 0; }, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: filt === f[0] ? "#fff" : "rgba(0,0,0,.4)", color: filt === f[0] ? "#000" : "#fff" } }, f[1]))),
             RE("button", { onClick: () => setCam(true), className: "rounded-full px-4 py-2 text-sm font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "🎥 Créer")),
         !all ? RE("div", { className: "h-full flex items-center justify-center", style: { color: "#fff" } }, RE(Loader2, { size: 22, className: "animate-spin" }))
             : !items.length ? RE("div", { className: "h-full flex flex-col items-center justify-center text-center p-8", style: { color: "#fff" } }, RE("div", { className: "text-5xl mb-3" }, "🎬"), RE("div", { className: "font-semibold" }, "Rien à regarder pour l'instant"), RE("div", { className: "text-sm opacity-70 mt-1" }, "Crée une vidéo ou invite des amis."))
@@ -3616,7 +3713,8 @@ function PlusSheet({ me, onClose, flash }) {
         RE("div", { className: "flex-1 overflow-y-auto px-5 pb-8" },
             on && RE("div", { className: "rounded-2xl p-4 mb-4 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Plus actif " + (o.until ? "jusqu'au " + new Date(o.until).toLocaleDateString("fr-FR") : "à vie") + (o.by === "gift" ? " · offert 🎁" : "")),
             RE("div", { className: "text-sm mb-3", style: { color: "var(--muted)" } }, "Ce que Plus change aujourd'hui :"),
-            ["🎬 Vidéos 2× plus longues : story 60 s, vidéo longue 6 min, 24 Mo", "⏳ Stories vidéo visibles 48 h au lieu de 24 h", "✨ Filtres exclusifs : Couronne, Fleurs, Étoiles, VHS, Ciné, Mon image", "📑 Enregistrés illimités (15 en gratuit)", "⭐ Badge Plus et mise en avant dans le Flux", "💡 Soutenir le développement de l'appli"].map((t) => RE("div", { key: t, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, t)),
+            ["🎬 Vidéos 2× plus longues : story 60 s, vidéo longue 6 min, 24 Mo", "⏳ Stories vidéo visibles 48 h au lieu de 24 h", "✨ Filtres exclusifs : Couronne, Fleurs, Étoiles, VHS, Ciné, Mon image", "📑 Enregistrés illimités (15 en gratuit)", "⭐ Badge Plus et mise en avant dans le Flux", "🎨 Couleurs d'accent exclusives pour toute l'appli", "👁 Vues de tes vidéos et liste de ceux qui les ont aimées", "💡 Soutenir le développement de l'appli"].map((t) => RE("div", { key: t, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, t)),
+            on && RE(AccentPicker, null),
             !on && trial === false && RE("button", { onClick: async () => { await safeSet("plus:" + me.id, JSON.stringify({ until: Date.now() + 3 * 864e5, by: "trial", ts: Date.now() }), true); await safeSet("plusTrial", "1", false); setTrial(true); setPl(JSON.stringify({ until: Date.now() + 3 * 864e5 })); flash("Essai Plus de 3 jours activé 🎉"); }, className: "w-full rounded-2xl py-3.5 mt-4 text-sm font-semibold", style: { border: "2px solid #F5B800", color: "var(--fg)" } }, "🎁 Essayer gratuitement 3 jours"),
             !on && (link ? RE(React.Fragment, null, RE("div", { className: "text-center text-lg font-bold mt-4" }, price || "Voir le prix sur la page de paiement"), RE("button", { onClick: go, className: "w-full rounded-2xl py-4 mt-3 text-base font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "S'abonner"), RE("div", { className: "text-xs mt-2 text-center", style: { color: "var(--muted)" } }, "Paiement sécurisé par Stripe. Ton Plus est activé par l'admin après le paiement.")) : RE("div", { className: "text-sm mt-4 text-center", style: { color: "var(--muted)" } }, "L'abonnement n'est pas encore ouvert."))));
 }
@@ -3641,11 +3739,93 @@ function PlusAdmin({ flash }) {
         RE("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, "Comptes Plus"),
         !rows ? RE(Loader2, { size: 18, className: "animate-spin" }) : rows.map((r) => RE("div", { key: r.id, className: "flex items-center justify-between rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("span", null, "⭐ " + r.w + (r.o.by === "gift" ? " 🎁" : "") + (r.on ? "" : " (expiré)") + (r.o.until ? " · " + new Date(r.o.until).toLocaleDateString("fr-FR") : " · à vie")), bt("Retirer", () => revoke(r.id)))));
 }
+const RECO_WORDS = "lune soleil nuage riviere foret pomme tigre cafe piano rocher plage neige orage jardin miroir voile chene brume cedre fleur glace herbe ile jade koala lampe menthe nord olive perle quartz renard sable tulipe urne vague zebre argent bambou citron dune ecume flamme grotte hibou iris jungle kiwi lotus marbre nectar opale poivre raisin saule topaze violon wagon yeti zenith aube brise canyon delta".split(" ");
+const TT = (fr, en) => (window.__a11y && window.__a11y.get().lang === "en" ? en : fr);
+function newPhrase() { const a = new Uint32Array(12); crypto.getRandomValues(a); return Array.from(a).map((n) => RECO_WORDS[n % RECO_WORDS.length]).join(" "); }
+function normPhrase(p) { return String(p || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim(); }
+async function exportAccount(me) {
+    const keys = await safeList("");
+    const own = ["account:" + me.code, "codeIndex:" + me.code, "profile:" + me.id, "seen:" + me.id, "inbox:" + me.id, "story:" + me.id, "disc:" + me.id, "groups:" + me.id, "pub:" + me.id, "keybak:" + me.id, "vlist:" + me.id, "recovery:" + me.id, "plus:" + me.id];
+    const rel = keys.filter((k) => /^(conv|last|read|unread|streak):/.test(k) && k.indexOf(me.id) !== -1);
+    const shared = {}; for (const k of Array.from(new Set(own.concat(rel)))) { const v = await safeGet(k, true); if (v !== null && v !== undefined) shared[k] = v; }
+    const local = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^(pv:|st_)/.test(k)) local[k] = localStorage.getItem(k); }
+    return { app: "sans-trace", v: "5.4.2", id: me.id, code: me.code, at: Date.now(), shared, local };
+}
+function downloadJson(o, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(o)], { type: "application/json" })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500); }
+async function restoreAccount(d) {
+    if (!d || d.app !== "sans-trace" || !d.id || !d.code) throw new Error("bad");
+    let n = 0; const accKey = "account:" + d.code, cur = await safeGet(accKey, true);
+    for (const k of Object.keys(d.shared || {})) {
+        if (k.indexOf(d.id) === -1 && k.indexOf(d.code) === -1) continue;
+        if (k === accKey && cur && cur !== d.shared[k]) continue;
+        if (/^(vc|plus):/.test(k)) continue;
+        if (await safeSet(k, d.shared[k], true)) n++;
+    }
+    for (const k of Object.keys(d.local || {})) if (/^(pv:|st_)/.test(k)) localStorage.setItem(k, d.local[k]);
+    return n;
+}
+function RecoverySheet({ onClose }) {
+    useBack(true, onClose);
+    const [code, setCode] = React.useState(""), [ph, setPh] = React.useState(""), [pw, setPw] = React.useState(""), [msg, setMsg] = React.useState(""), [busy, setBusy] = React.useState(false);
+    const inp = { background: "var(--bg)", color: "var(--fg)", border: "1px solid var(--line)" };
+    const go = async () => {
+        setMsg(""); if (pw.length < 4) { setMsg(TT("Nouveau mot de passe : 4 caractères minimum.", "New password: 4 characters minimum.")); return; }
+        setBusy(true);
+        try {
+            const c = extractCode(code), id = await safeGet("codeIndex:" + c, true), rr = id && await safeGet("recovery:" + id, true), ra = await safeGet("account:" + c, true);
+            if (!id || !rr || !ra) { setMsg(TT("Code inconnu ou aucune phrase de secours enregistrée.", "Unknown code or no recovery phrase saved.")); setBusy(false); return; }
+            const rec = parseObj(rr);
+            if ((await hashPassword(normPhrase(ph), rec.salt)) !== rec.hash) { setMsg(TT("Phrase de secours incorrecte.", "Wrong recovery phrase.")); setBusy(false); return; }
+            const acc = parseObj(ra); acc.salt = randomSalt(); acc.hash = await hashPassword(pw, acc.salt);
+            await safeSet("account:" + c, JSON.stringify(acc), true);
+            setMsg(TT("✅ Mot de passe changé. Tu peux te connecter.", "✅ Password changed. You can sign in."));
+        } catch (e) { setMsg(TT("Erreur réseau.", "Network error.")); }
+        setBusy(false);
+    };
+    const restore = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const r = new FileReader(); r.onload = async () => { try { const n = await restoreAccount(JSON.parse(String(r.result))); setMsg(TT("✅ Sauvegarde restaurée (" + n + " éléments). Connecte-toi.", "✅ Backup restored (" + n + " items). Sign in.")); } catch (er) { setMsg(TT("Fichier invalide.", "Invalid file.")); } }; r.readAsText(f); };
+    return RE("div", { style: { position: "fixed", inset: 0, zIndex: 90, background: "var(--bg)", color: "var(--fg)", overflowY: "auto", padding: 20 } },
+        RE("div", { className: "flex items-center justify-between mb-4" }, RE("div", { className: "text-lg font-semibold" }, TT("Récupérer mon compte", "Recover my account")), RE("button", { onClick: onClose, className: "text-xl" }, "✕")),
+        RE("input", { value: code, onChange: (e) => setCode(e.target.value), placeholder: TT("Code ami", "Friend code"), className: "w-full rounded-xl px-4 py-3 text-sm mb-2 font-mono", style: inp }),
+        RE("textarea", { value: ph, onChange: (e) => setPh(e.target.value), rows: 3, placeholder: TT("Ta phrase de secours (12 mots)", "Your recovery phrase (12 words)"), className: "w-full rounded-xl px-4 py-3 text-sm mb-2", style: inp }),
+        RE("input", { type: "password", value: pw, onChange: (e) => setPw(e.target.value), placeholder: TT("Nouveau mot de passe", "New password"), className: "w-full rounded-xl px-4 py-3 text-sm mb-3", style: inp }),
+        msg && RE("div", { className: "text-sm mb-3" }, msg),
+        RE("button", { onClick: go, disabled: busy, className: "w-full rounded-2xl py-3.5 text-sm font-semibold mb-3", style: { background: "var(--accent)", color: "var(--on-accent)" } }, busy ? "…" : TT("Changer le mot de passe", "Reset password")),
+        RE("div", { className: "text-xs mb-3", style: { color: "var(--muted)" } }, TT("Après une récupération, les anciens messages chiffrés peuvent ne plus être lisibles.", "After a recovery, old encrypted messages may no longer be readable.")),
+        RE("label", { className: "block text-center rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)" } }, TT("📂 Restaurer depuis un fichier de sauvegarde", "📂 Restore from a backup file"), RE("input", { type: "file", accept: "application/json,.json", onChange: restore, style: { position: "absolute", width: 1, height: 1, opacity: 0 } })));
+}
+function SecuritySheet({ me, flash, onClose }) {
+    useBack(true, onClose);
+    const [, tick] = React.useState(0), [phrase, setPhrase] = React.useState(""), [has, setHas] = React.useState(null), [busy, setBusy] = React.useState(false);
+    const a = window.__a11y.get(), setA = (p) => { window.__a11y.set(p); tick((x) => x + 1); };
+    React.useEffect(() => { safeGet("recovery:" + me.id, true).then((r) => setHas(!!r)); }, []);
+    const gen = async () => { const p = newPhrase(), salt = randomSalt(); await safeSet("recovery:" + me.id, JSON.stringify({ salt, hash: await hashPassword(normPhrase(p), salt), ts: Date.now() }), true); setPhrase(p); setHas(true); };
+    const exp = async () => { setBusy(true); try { downloadJson(await exportAccount(me), "sans-trace-" + me.code + ".json"); flash(TT("Sauvegarde téléchargée. Garde-la secrète.", "Backup downloaded. Keep it secret.")); } catch (e) { flash(TT("Export impossible.", "Export failed.")); } setBusy(false); };
+    const rest = (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const r = new FileReader(); r.onload = async () => { try { const d = JSON.parse(String(r.result)); if (d.id !== me.id) { flash(TT("Cette sauvegarde est d'un autre compte.", "This backup belongs to another account.")); return; } flash(TT("Restauré : ", "Restored: ") + (await restoreAccount(d)) + " " + TT("éléments", "items")); } catch (er) { flash(TT("Fichier invalide.", "Invalid file.")); } }; r.readAsText(f); };
+    const card = { border: "1px solid var(--line2)" }, bt = (t, f, on) => RE("button", { onClick: f, disabled: busy, className: "rounded-full px-4 py-2 text-xs font-semibold", style: { background: on ? "var(--accent)" : "var(--line2)", color: on ? "var(--on-accent)" : "var(--fg)" } }, t);
+    const sw = (lbl, key) => RE("div", { className: "flex items-center justify-between text-sm py-2" }, RE("span", null, lbl), bt(a[key] ? "ON" : "OFF", () => setA({ [key]: !a[key] }), !!a[key]));
+    return RE("div", { style: { position: "fixed", inset: 0, zIndex: 86, background: "var(--bg)", color: "var(--fg)", display: "flex", flexDirection: "column" } },
+        RE("div", { className: "flex items-center justify-between p-4" }, RE("div", { className: "font-semibold text-lg" }, TT("🔐 Sécurité & données", "🔐 Security & data")), RE("button", { onClick: onClose, className: "text-xl" }, "✕")),
+        RE("div", { className: "flex-1 overflow-y-auto px-4 pb-8" },
+            RE("div", { className: "rounded-2xl p-4 mb-3", style: card }, RE("div", { className: "font-semibold text-sm mb-1" }, TT("Phrase de secours", "Recovery phrase")), RE("div", { className: "text-xs mb-3", style: { color: "var(--muted)" } }, TT("12 mots pour retrouver ton compte si tu oublies ton mot de passe. Note-la sur papier, ne la partage jamais.", "12 words to get your account back if you forget your password. Write it on paper, never share it.")),
+                phrase && RE("div", { className: "rounded-xl p-3 mb-3 text-sm font-mono text-center", style: { background: "var(--line2)" } }, phrase),
+                bt(has ? TT("Générer une nouvelle phrase", "Generate a new phrase") : TT("Créer ma phrase de secours", "Create my recovery phrase"), gen, !has), has && !phrase && RE("div", { className: "text-xs mt-2", style: { color: "var(--muted)" } }, TT("✅ Une phrase est enregistrée.", "✅ A phrase is saved."))),
+            RE("div", { className: "rounded-2xl p-4 mb-3", style: card }, RE("div", { className: "font-semibold text-sm mb-1" }, TT("Sauvegarde du compte", "Account backup")), RE("div", { className: "text-xs mb-3", style: { color: "var(--muted)" } }, TT("Fichier avec ton profil, tes discussions, tes clés et tes réglages (sans les vidéos). Il contient tes clés de chiffrement : garde-le privé.", "File with your profile, chats, keys and settings (no videos). It contains your encryption keys: keep it private.")),
+                RE("div", { className: "flex gap-2" }, bt(TT("📥 Exporter", "📥 Export"), exp, true), RE("label", { className: "rounded-full px-4 py-2 text-xs font-semibold", style: { background: "var(--line2)" } }, TT("📤 Restaurer", "📤 Restore"), RE("input", { type: "file", accept: "application/json,.json", onChange: rest, style: { position: "absolute", width: 1, height: 1, opacity: 0 } })))),
+            RE("div", { className: "rounded-2xl p-4 mb-3", style: card }, RE("div", { className: "font-semibold text-sm mb-1" }, TT("Accessibilité & langue", "Accessibility & language")), sw(TT("Contrastes renforcés", "High contrast"), "hc"), sw(TT("Réduire les animations", "Reduce animations"), "rm"),
+                RE("div", { className: "flex items-center justify-between text-sm py-2" }, RE("span", null, TT("Langue", "Language")), RE("div", { className: "flex gap-2" }, bt("FR", () => setA({ lang: "fr" }), a.lang !== "en"), bt("EN", () => setA({ lang: "en" }), a.lang === "en")))),
+            RE("div", { className: "rounded-2xl p-4 mb-3", style: card }, RE("div", { className: "font-semibold text-sm mb-2" }, TT("Tests automatiques", "Automated tests")), bt(TT("🧪 Ouvrir la page de tests", "🧪 Open the test page"), () => { onClose(); setTimeout(() => window.__showTests && window.__showTests(), 300); })),
+            RE("div", { className: "rounded-2xl p-4", style: card }, RE("div", { className: "font-semibold text-sm mb-2" }, TT("Visite guidée", "Guided tour")), bt(TT("Revoir la visite", "Replay the tour"), () => { onClose(); setTimeout(() => window.__startTour && window.__startTour(true), 300); }))));
+}
+function AccentPicker() {
+    const cols = ["#5EEAD4", "#F5B800", "#FF7A59", "#A78BFA", "#F472B6", "#60A5FA", "#34D399"], [c, setC] = React.useState(localStorage.getItem("st_accent") || "");
+    const pick = (x) => { localStorage.setItem("st_accent", x); document.documentElement.style.setProperty("--accent", x); document.documentElement.style.setProperty("--accent-text", x); setC(x); };
+    return RE("div", { className: "mt-3 mb-1" }, RE("div", { className: "text-xs mb-2", style: { color: "var(--muted)" } }, "🎨 Couleur d'accent"), RE("div", { className: "flex gap-3" }, cols.map((x) => RE("button", { key: x, onClick: () => pick(x), style: { width: 34, height: 34, borderRadius: 17, background: x, border: c === x ? "3px solid #fff" : "2px solid transparent" } }))));
+}
 function FbWrap({ me, flash, children }) {
-    const [o, setO] = React.useState(false), [md, setMd] = React.useState(false), [ps, setPs] = React.useState(false), [ism, setIsm] = React.useState(me.id === ADMIN_ID);
+    const [o, setO] = React.useState(false), [md, setMd] = React.useState(false), [ps, setPs] = React.useState(false), [sc, setSc] = React.useState(false), [ism, setIsm] = React.useState(me.id === ADMIN_ID);
     React.useEffect(() => { (async () => { const ks = (await safeList("fb:")).filter((k) => k.endsWith("-" + me.id)); const seen = parseObj(await safeGet("fsseen", false)); let ch = false; for (const k of ks) { const st = await safeGet("fs:" + k, true); if (st && seen[k] !== st) { flash("💡 Ton idée est passée : " + st); seen[k] = st; ch = true; } } if (ch) await safeSet("fsseen", JSON.stringify(seen), false); })(); }, []);
     React.useEffect(() => { safeGet("mods", true).then((r) => { if (parseList(r).indexOf(me.id) !== -1) setIsm(true); }); }, []);
-    return RE(React.Fragment, null, children, RE("button", { onClick: () => setPs(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Sans-Trace Plus"), ps && RE(PlusSheet, { me, flash, onClose: () => setPs(false) }), ism && RE("button", { onClick: () => setMd(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🛡️ Modération"), md && RE(ModPanel, { me, flash, onClose: () => setMd(false) }), RE("button", { onClick: () => setO(true), className: "mx-5 mb-3 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "💡 Avis, idées & message à l'admin"), o && RE(FeedbackSheet, { me, flash, onClose: () => setO(false) }));
+    return RE(React.Fragment, null, children, RE("button", { onClick: () => setSc(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🔐 Sécurité & données"), sc && RE(SecuritySheet, { me, flash, onClose: () => setSc(false) }), RE("button", { onClick: () => setPs(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Sans-Trace Plus"), ps && RE(PlusSheet, { me, flash, onClose: () => setPs(false) }), ism && RE("button", { onClick: () => setMd(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🛡️ Modération"), md && RE(ModPanel, { me, flash, onClose: () => setMd(false) }), RE("button", { onClick: () => setO(true), className: "mx-5 mb-3 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "💡 Avis, idées & message à l'admin"), o && RE(FeedbackSheet, { me, flash, onClose: () => setO(false) }));
 }
 function BottomNav({ tab, setTab, dot }) {
     const items = [["msgs", "Messages"], ["stories", "Stories"], ["flux", "Flux"], ["discover", "Découvrir"], ["profile", "Profil"]];
@@ -4603,6 +4783,7 @@ function HomeMsgs({ me, onOpenChat, onLogout, onProfileUpdate, onSettings, prefs
             React.createElement("button", { onClick: inst.install, className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Installer"),
             React.createElement("button", { onClick: () => setInstHide(true), className: "text-xs", style: { color: "var(--muted)" } }, "\u2715"))),
         top,
+        React.createElement(GsButton, { me: me, contacts: contacts, onOpenChat: onOpenChat }),
         React.createElement("div", { className: "flex gap-2 px-4 pt-3 overflow-x-auto stScroll", role: "tablist" }, [["all", "Tous", 0], ["unread", "Non lus", totalUnread], ["groups", "Groupes", 0], ["fav", "Favoris", 0]].map((f) => React.createElement("button", { key: f[0], onClick: () => setFlt(f[0]), role: "tab", "aria-selected": flt === f[0], className: "shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold", style: flt === f[0] ? { background: "var(--accent)", color: "var(--on-accent)" } : { background: "var(--card)", border: "1px solid var(--line)" } }, f[1] + (f[2] ? " · " + f[2] : ""))).concat([React.createElement("button", { key: "inv", onClick: shareInvite, className: "shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold", style: { background: "var(--card2)", border: "1px dashed var(--line2)" } }, copied ? "✓ Copié" : "🔗 Inviter")])),
         contacts.length > 2 && (React.createElement("div", { className: "px-4 pt-3" },
             React.createElement("input", { value: q, onChange: (e) => setQ(e.target.value), placeholder: "Rechercher une conversation", className: "w-full rounded-full px-4 py-2.5 text-sm outline-none", style: { background: "var(--card)", color: "var(--fg)", border: "1px solid var(--line)" } }))),
@@ -5007,8 +5188,8 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
         return () => window.removeEventListener("keydown", k);
     }, [sheet, menu, selected, aiKind]);
     const newId = () => Date.now() + "-" + Math.random();
-    const pinMessage = (mid) => __awaiter(this, void 0, void 0, function* () { yield safeSet("pinmsg:" + id, mid, true); setPinId(mid); flashNotice("Message épinglé 📌"); });
-    const unpin = () => __awaiter(this, void 0, void 0, function* () { yield safeSet("pinmsg:" + id, "", true); setPinId(""); });
+    const pinMessage = (mid) => __awaiter(this, void 0, void 0, function* () { const nx = JSON.stringify(pinAdd(parsePins(pinId), mid, 5)); yield safeSet("pinmsg:" + id, nx, true); setPinId(nx); flashNotice("Message épinglé 📌 (" + parsePins(nx).length + "/5)"); });
+    const unpin = (mid) => __awaiter(this, void 0, void 0, function* () { const nx = mid ? JSON.stringify(parsePins(pinId).filter((x) => x !== mid)) : ""; yield safeSet("pinmsg:" + id, nx, true); setPinId(nx); });
     const exportChat = () => {
         const lines = messages.filter((m) => !m.deleted && m.type !== "calllog").map((m) => {
             const who = m.from === me.id ? me.pseudo : other.isGroup ? names[m.from] || "?" : other.pseudo;
@@ -5395,14 +5576,10 @@ function Chat({ me, other, onBack, prefs, onPrefs, onCall }) {
                 " participant",
                 gLive.n > 1 ? "s" : ""),
             React.createElement("button", { onClick: () => setGcall(gLive.kind), className: "font-semibold rounded-full px-3 py-1", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Rejoindre"))),
-        pinId && (() => {
-            const pm = messages.filter((x) => x.id === pinId)[0];
-            return pm && !pm.deleted ? (React.createElement("div", { className: "px-3 py-2 flex items-center justify-between text-xs", style: { background: "var(--card)", borderBottom: "1px solid var(--line)" } },
-                React.createElement("span", { className: "truncate" },
-                    "\uD83D\uDCCC ",
-                    previewOf(pm)),
-                React.createElement("button", { onClick: unpin, className: "underline shrink-0 ml-2", style: { color: "var(--muted)" } }, "Retirer"))) : null;
-        })(),
+        parsePins(pinId).length > 0 && React.createElement("div", { style: { maxHeight: 96, overflowY: "auto", borderBottom: "1px solid var(--line)", background: "var(--card)" } }, parsePins(pinId).map((pid) => {
+            const pm = messages.filter((x) => x.id === pid)[0];
+            return pm && !pm.deleted ? React.createElement("div", { key: pid, className: "px-3 py-1.5 flex items-center justify-between text-xs" }, React.createElement("span", { className: "truncate" }, "\uD83D\uDCCC ", previewOf(pm)), React.createElement("button", { onClick: () => unpin(pid), className: "underline shrink-0 ml-2", style: { color: "var(--muted)" } }, "Retirer")) : null;
+        })),
         ttl > 0 && React.createElement("div", { className: "px-3 py-1 text-[11px] text-center", style: { color: "var(--muted)", borderBottom: "1px solid var(--line)" } },
             "\u23F3 Messages \u00E9ph\u00E9m\u00E8res : ",
             fmtTtl(ttl)),
@@ -7749,5 +7926,112 @@ function App() {
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App, null));
 
 </script>
+<script>
+(function () {
+  var KEY = "st_a11y";
+  var EN = {"Un compte protégé par mot de passe. Pas de numéro, pas d'e-mail.":"A password-protected account. No phone number, no email.","🔒 Chiffré":"🔒 Encrypted","👻 Sans trace":"👻 No trace","🎬 Stories & vidéos":"🎬 Stories & videos","Créer un compte":"Create an account","Se connecter":"Sign in","À savoir avant de commencer":"Good to know before you start","Le mot de passe est haché avant d'être stocké, mais cette appli reste un prototype sans vrai serveur : les données restent techniquement lisibles par toute personne qui l'utilise. Ne réutilise pas un mot de passe que tu utilises ailleurs.":"Your password is hashed before being stored, but this app is a prototype without a real server: data is technically readable by anyone using it. Do not reuse a password you use elsewhere.","Entre ton code ami et ton mot de passe.":"Enter your friend code and password.","Code ami":"Friend code","Mot de passe":"Password","Mot de passe oublié ?":"Forgot password?","Aucun compte avec ce code.":"No account with this code.","Mot de passe incorrect.":"Wrong password.","Messages":"Messages","Stories":"Stories","Flux":"Feed","Découvrir":"Discover","Profil":"Profile","Ta story":"Your story","Des instants qui disparaissent après 24 h":"Moments that disappear after 24 h","Ajouter":"Add","Aucune story pour l'instant":"No stories yet","Partage une photo ou un petit texte : tes contacts le verront pendant 24 h.":"Share a photo or a short text: your contacts will see it for 24 h.","Créer ma story":"Create my story","Voir la story →":"View story →","Réglages":"Settings","Taille du texte":"Text size","Pseudo":"Username","Enregistrer":"Save","Changer le mot de passe":"Change password","Changer":"Change","Se déconnecter":"Log out","Supprimer mon compte":"Delete my account","Supprimer définitivement ?":"Delete permanently?","Annuler":"Cancel","Supprimer":"Delete","Partager":"Share","↺ Avatar par défaut":"↺ Default avatar","🎨 Créer mon avatar":"🎨 Create my avatar","📷 Utiliser une photo":"📷 Use a photo","Sans-Trace · pseudonyme, sans numéro ni e-mail":"Sans-Trace · pseudonymous, no phone number or email","Sonnerie et son de notification personnalisés":"Custom ringtone and notification sound","🛡️ Espace administrateur":"🛡️ Admin area","✅ Sans-Trace est installée sur cet appareil.":"✅ Sans-Trace is installed on this device.","Pour toi":"For you","Courtes":"Short","Longues":"Long","🎥 Créer":"🎥 Create","Rien à regarder pour l'instant":"Nothing to watch yet","Commentaires":"Comments","Envoyer":"Send","Publier":"Publish","Chargement…":"Loading…","S'abonner":"Subscribe","Avis & idées":"Feedback & ideas","💡 Avis, idées & message à l'admin":"💡 Feedback, ideas & message to admin","🛡️ Modération":"🛡️ Moderation","🔐 Sécurité & données":"🔐 Security & data","Découvrir ":"Discover","Aucun":"None","Mon image":"My image","Titre de la vidéo":"Video title","Légende":"Caption","Ajouter un commentaire…":"Add a comment…","Rien":"Nothing","📌 À la une":"📌 Highlights"};
+  var EP = {"ton mot de passe":"your password","Ajouter un commentaire…":"Add a comment…","Légende":"Caption","Titre de la vidéo":"Video title","Code ami":"Friend code"};
+  var lang = "fr", busy = false, obs = null;
+  function get() { try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; } }
+  function tx(n) {
+    if (n.nodeType === 3) {
+      var p = n.parentNode && n.parentNode.nodeName; if (p === "SCRIPT" || p === "STYLE" || p === "TEXTAREA") return;
+      var v = n.nodeValue;
+      if (lang === "en") { var t = v.trim(); if (t && EN[t] && v !== n.__en) { n.__fr = v; n.__en = v.replace(t, EN[t]); n.nodeValue = n.__en; } }
+      else if (n.__en !== undefined && v === n.__en) { n.nodeValue = n.__fr; n.__en = undefined; }
+    } else if (n.nodeType === 1) {
+      if (n.hasAttribute && n.hasAttribute("placeholder")) { var ph = n.getAttribute("placeholder"); if (lang === "en" && EP[ph]) { n.__phfr = ph; n.setAttribute("placeholder", EP[ph]); } else if (lang !== "en" && n.__phfr && ph === EP[n.__phfr]) { n.setAttribute("placeholder", n.__phfr); n.__phfr = null; } }
+      for (var c = n.firstChild; c; c = c.nextSibling) tx(c);
+    }
+  }
+  function run() { busy = true; if (obs) obs.disconnect(); try { tx(document.body); } catch (e) { } if (obs) obs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["placeholder"] }); busy = false; }
+  var pend = false; function sched() { if (pend || busy) return; pend = true; requestAnimationFrame(function () { pend = false; run(); }); }
+  function apply() {
+    var o = get(), h = document.documentElement;
+    var rm = o.rm === undefined ? !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) : !!o.rm;
+    h.classList.toggle("hc", !!o.hc); h.classList.toggle("rm", rm);
+    lang = o.lang === "en" ? "en" : "fr"; h.lang = lang;
+    var ac = localStorage.getItem("st_accent"); if (ac) { h.style.setProperty("--accent", ac); h.style.setProperty("--accent-text", ac); }
+    run();
+  }
+  window.__a11y = { get: get, set: function (p) { var o = get(); for (var k in p) o[k] = p[k]; localStorage.setItem(KEY, JSON.stringify(o)); apply(); } };
+  function start() { obs = new MutationObserver(sched); apply(); }
+  if (document.body) start(); else document.addEventListener("DOMContentLoaded", start);
+  /* ---- visite guidée ---- */
+  var STEPS = [
+    ["👋", ["Bienvenue sur Sans-Trace", "Welcome to Sans-Trace"], ["Une messagerie pseudonyme : pas de numéro, pas d'e-mail. Tes discussions privées sont chiffrées de bout en bout.", "A pseudonymous messenger: no phone number, no email. Your private chats are end-to-end encrypted."]],
+    ["💬", ["Messages & groupes", "Messages & groups"], ["Ajoute des amis avec leur code ami, crée des groupes, envoie photos, vocaux et fichiers.", "Add friends with their friend code, create groups, send photos, voice notes and files."]],
+    ["🎬", ["Stories & Flux", "Stories & Feed"], ["Publie des stories 24 h et des vidéos, fais défiler le Flux à l'infini, commente et enregistre.", "Post 24 h stories and videos, scroll the Feed endlessly, comment and save."]],
+    ["✨", ["Filtres", "Filters"], ["Glisse sur l'écran de la caméra pour changer de filtre de visage.", "Swipe the camera screen to change face filters."]],
+    ["🔐", ["Protège ton compte", "Protect your account"], ["Dans Profil, ouvre « Sécurité & données » : crée ta phrase de secours et sauvegarde ton compte.", "In Profile, open “Security & data”: create your recovery phrase and back up your account."]],
+    ["⭐", ["Sans-Trace Plus", "Sans-Trace Plus"], ["Vidéos plus longues, filtres exclusifs, couleurs, statistiques… Essai gratuit de 3 jours dans Profil.", "Longer videos, exclusive filters, colors, stats… Free 3-day trial in Profile."]]
+  ];
+  function tour(force) {
+    if (document.getElementById("stTour")) return;
+    var i = 0, L = lang === "en" ? 1 : 0, ov = document.createElement("div"); ov.id = "stTour";
+    ov.style.cssText = "position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:24px;font-family:inherit";
+    function draw() {
+      var s = STEPS[i], last = i === STEPS.length - 1;
+      ov.innerHTML = '<div style="max-width:340px;width:100%;background:var(--bg,#111);color:var(--fg,#fff);border:1px solid var(--line2,#444);border-radius:28px;padding:28px;text-align:center"><div style="font-size:54px;margin-bottom:10px">' + s[0] + '</div><div style="font-size:20px;font-weight:700;margin-bottom:8px">' + s[1][L] + '</div><div style="font-size:14px;opacity:.85;line-height:1.5;margin-bottom:18px">' + s[2][L] + '</div><div style="margin-bottom:16px">' + STEPS.map(function (_, k) { return '<span style="display:inline-block;width:' + (k === i ? 18 : 7) + 'px;height:7px;border-radius:4px;margin:0 3px;background:' + (k === i ? "var(--accent,#5eead4)" : "rgba(255,255,255,.3)") + '"></span>'; }).join("") + '</div><button id="stTn" style="width:100%;padding:14px;border-radius:16px;border:0;font-weight:700;background:var(--accent,#5eead4);color:var(--on-accent,#000)">' + (last ? (L ? "Let's go" : "C'est parti") : (L ? "Next" : "Suivant")) + '</button>' + (last ? "" : '<button id="stTs" style="margin-top:10px;background:none;border:0;color:inherit;opacity:.6;font-size:13px">' + (L ? "Skip" : "Passer") + '</button>') + '</div>';
+      ov.querySelector("#stTn").onclick = function () { if (last) done(); else { i++; draw(); } };
+      var sk = ov.querySelector("#stTs"); if (sk) sk.onclick = done;
+    }
+    function done() { localStorage.setItem("st_tour", "1"); ov.remove(); }
+    draw(); document.body.appendChild(ov);
+  }
+  window.__startTour = tour;
+  var vl = document.createElement("div"); vl.id = "stVer"; vl.setAttribute("aria-hidden", "true"); vl.textContent = "v5.4.3.2"; vl.style.cssText = "position:fixed;right:6px;bottom:2px;font-size:8px;opacity:.35;pointer-events:none;z-index:9999;color:var(--fg,#fff)"; document.body.appendChild(vl);
+  setInterval(function () { if (!localStorage.getItem("st_tour") && localStorage.getItem("pv:profile") && !document.getElementById("stTour")) tour(); }, 1500);
+})();
+</script>
+
+<script>
+(function () {
+  var T = [];
+  function t(n, f) { T.push([n, f]); }
+  function eq(a, b, m) { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((m || "") + " attendu " + JSON.stringify(b) + ", reçu " + JSON.stringify(a)); }
+  var now = Date.now();
+  t("SHA-256 (vecteur connu « abc »)", async function () { eq(await sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"); });
+  t("hashPassword stable et sensible au sel", async function () { var a = await hashPassword("mdp", "s1"), b = await hashPassword("mdp", "s1"), c = await hashPassword("mdp", "s2"); eq(a === b, true); eq(a === c, false); });
+  t("parseList tolère un JSON invalide", function () { eq(parseList("pas du json"), []); eq(parseList("[1,2]"), [1, 2]); });
+  t("parseObj lit un objet", function () { eq(parseObj('{"a":1}').a, 1); });
+  t("plusOk : absent, expiré, valide, à vie", function () { eq(plusOk(null), false); eq(plusOk(JSON.stringify({ until: now - 1000 })), false); eq(plusOk(JSON.stringify({ until: now + 1e6 })), true); eq(plusOk(JSON.stringify({ until: 0 })), true); });
+  t("phrase de secours : normalisation", function () { eq(normPhrase("  Lune  SOLEIL!! "), "lune soleil"); });
+  t("phrase de secours : 12 mots de la liste", function () { var w = newPhrase().split(" "); eq(w.length, 12); eq(w.every(function (x) { return RECO_WORDS.indexOf(x) !== -1; }), true); });
+  t("découpe base64 : aller-retour binaire", async function () { var src = new Uint8Array([0, 1, 2, 250, 255, 128]), b = b64ToBlob(await blobToB64(new Blob([src])), "video/webm"), out = new Uint8Array(await new Response(b).arrayBuffer()); eq(Array.from(out), Array.from(src)); });
+  t("stockage privé : écrire, lire, lister, supprimer", async function () { await safeSet("__t:a", "42", false); eq(await safeGet("__t:a", false), "42"); eq((await safeList("__t:", false)).indexOf("__t:a") !== -1, true); await safeDelete("__t:a", false); eq(await safeGet("__t:a", false), null); });
+  t("messages épinglés : lecture ancien et nouveau format", function () { eq(parsePins(""), []); eq(parsePins("abc"), ["abc"]); eq(parsePins('["a","b"]'), ["a", "b"]); eq(parsePins("[cassé"), []); });
+  t("messages épinglés : maximum 5, sans doublon", function () { eq(pinAdd(["1", "2", "3", "4", "5"], "6"), ["2", "3", "4", "5", "6"]); eq(pinAdd(["1", "2"], "1"), ["2", "1"]); });
+  t("recherche : texte, suppressions, système ignorés", function () { var l = [{ ts: now, content: "Bonjour Léa" }, { ts: now - 1, content: "ancien BONJOUR" }, { ts: now, content: "bonjour", deleted: true }, { ts: now, content: "bonjour", type: "system" }]; eq(filterMessages(l, "bonjour").length, 2); eq(filterMessages(l, "zzz").length, 0); });
+  t("recherche : filtre par date", function () { var d = new Date(now - 864e5 * 3).toISOString().slice(0, 10), l = [{ ts: now, content: "a" }, { ts: now - 864e5 * 10, content: "b" }]; eq(filterMessages(l, "", d).length, 1); eq(filterMessages(l, "", "", d).length, 1); });
+  t("recherche : ignore les données binaires", function () { eq(filterMessages([{ ts: now, content: "data:audio/webm;base64,AAAA" }], "audio").length, 0); });
+  t("forme d'onde : taille et normalisation", function () { var p = computePeaks(Float32Array.from({ length: 3600 }, function (_, i) { return Math.sin(i / 20) * (i / 3600); }), 36); eq(p.length, 36); eq(Math.max.apply(null, p), 1); eq(p.every(function (v) { return v >= 0 && v <= 1; }), true); });
+  t("stories vidéo : expirées exclues, actives gardées", function () { var raw = JSON.stringify([{ id: "a", ts: now, st: 1, n: 1 }, { id: "b", ts: now - 3e8, st: 1, n: 1 }, { id: "c", ts: now, n: 1 }]), r = vidStories(raw); eq(r.length, 1); eq(r[0].id, "a"); eq(r[0].k, "vid"); });
+  t("identifiant de conversation symétrique", function () { eq(convId("a", "b"), convId("b", "a")); });
+  t("version affichée dans l'appli", function () { eq(document.body.innerText.indexOf("v5.4.3.2") !== -1 || !!document.getElementById("stVer"), true); });
+  async function run(box) {
+    var ok = 0, ko = 0; box.innerHTML = "";
+    for (var i = 0; i < T.length; i++) {
+      var row = document.createElement("div"), err = "";
+      try { await T[i][1](); ok++; } catch (e) { ko++; err = String(e && e.message || e); }
+      row.style.cssText = "padding:8px 0;border-bottom:1px solid rgba(255,255,255,.12);font-size:13px";
+      row.textContent = (err ? "❌ " : "✅ ") + T[i][0] + (err ? " — " + err : ""); box.appendChild(row);
+    }
+    return { ok: ok, ko: ko };
+  }
+  function show() {
+    if (document.getElementById("stTests")) return;
+    var ov = document.createElement("div"); ov.id = "stTests";
+    ov.style.cssText = "position:fixed;inset:0;z-index:300;background:#0c0c12;color:#fff;overflow:auto;padding:20px;font-family:system-ui,sans-serif";
+    ov.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:18px">🧪 Tests automatiques · v5.4.3.2</b><button id="stTx" style="font-size:20px;color:#fff">✕</button></div><div id="stTs2" style="font-size:14px;margin-bottom:10px;opacity:.85">Exécution…</div><div id="stTl"></div>';
+    document.body.appendChild(ov);
+    ov.querySelector("#stTx").onclick = function () { ov.remove(); if (location.hash === "#tests") history.replaceState(null, "", location.pathname + location.search); };
+    run(ov.querySelector("#stTl")).then(function (r) { ov.querySelector("#stTs2").textContent = r.ko ? "❌ " + r.ko + " échec(s) sur " + (r.ok + r.ko) : "✅ Tous les tests réussis (" + r.ok + ")"; });
+  }
+  window.__showTests = show; window.__runTests = function () { var d = document.createElement("div"); return run(d); };
+  if (/(^|[?&#])tests\b/.test(location.search + location.hash)) setTimeout(show, 1200);
+})();
+</script>
+
 </body>
 </html>
