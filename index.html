@@ -183,9 +183,23 @@ function navInit() {
     catch (e) { } };
     document.addEventListener("pointerup", arm, { once: true, capture: true });
     document.addEventListener("keydown", arm, { once: true, capture: true });
+    // v5.4.3.2 : pendant le choix d'un fichier (galerie / appareil photo), certains téléphones
+    // déclenchent un faux « retour » : on l'ignore pour ne pas quitter l'écran en cours.
+    window.__stPicking = 0;
+    const pickStart = (e) => { const t = e.target; if (t && t.closest && (t.closest('input[type="file"]') || t.closest("label"))) { const l = t.closest("label"); if (t.matches && t.matches('input[type="file"]') || (l && l.querySelector('input[type="file"]'))) window.__stPicking = Date.now(); } };
+    document.addEventListener("click", pickStart, true);
+    document.addEventListener("change", (e) => { if (e.target && e.target.type === "file") window.__stPicking = Date.now(); }, true);
+    document.addEventListener("cancel", (e) => { if (e.target && e.target.type === "file") window.__stPicking = Date.now(); }, true);
+    window.addEventListener("focus", () => { if (window.__stPicking) window.__stPicking = Date.now(); });
+    document.addEventListener("visibilitychange", () => { if (window.__stPicking && !document.hidden) window.__stPicking = Date.now(); });
     window.addEventListener("popstate", () => {
         if (!NAV.armed)
             return;
+        if (window.__stPicking && Date.now() - window.__stPicking < 8000) {
+            window.__stPicking = Date.now();
+            try { history.pushState({ stTrap: 1 }, ""); } catch (e) { }
+            return;
+        }
         const top = NAV.stack.pop();
         if (top) {
             try {
@@ -2731,7 +2745,7 @@ function ensureAdmin() {
 function deleteAccountData(id, code) {
     return __awaiter(this, void 0, void 0, function* () {
         const keys = yield safeList("");
-        const mine = ["account:" + code, "codeIndex:" + code, "profile:" + id, "seen:" + id, "inbox:" + id, "banned:" + id, "story:" + id, "disc:" + id, "groups:" + id, "pub:" + id, "keybak:" + id, "push:" + id, "notif:" + id, "warn:" + id, "kick:" + id];
+        const mine = ["account:" + code, "codeIndex:" + code, "profile:" + id, "seen:" + id, "inbox:" + id, "banned:" + id, "story:" + id, "disc:" + id, "groups:" + id, "pub:" + id, "keybak:" + id, "prefsync:" + id, "push:" + id, "notif:" + id, "warn:" + id, "kick:" + id];
         const rel = keys.filter((k) => /^(conv|last|read|unread|typing|streak):/.test(k) && k.indexOf(id) !== -1);
         yield Promise.all(mine.concat(rel).map((k) => safeDelete(k, true)));
         const inboxes = keys.filter((k) => k.indexOf("inbox:") === 0 && k !== "inbox:" + id);
@@ -3643,7 +3657,8 @@ function CommentsSheet({ me, x, onClose, flash }) {
 }
 function FeedbackSheet({ me, onClose, flash }) {
     useBack(true, onClose);
-    const adm = me.id === ADMIN_ID, [tab, setTab] = React.useState("idea"), [t, setT] = React.useState(""), [rows, setRows] = React.useState(null), [vt, setVt] = React.useState({});
+    const [admins, setAdmins] = React.useState([]); React.useEffect(() => { safeGet("admins", true).then((r) => setAdmins(parseList(r))); }, []);
+    const adm = me.id === ADMIN_ID || admins.indexOf(me.id) !== -1, [tab, setTab] = React.useState("idea"), [t, setT] = React.useState(""), [rows, setRows] = React.useState(null), [vt, setVt] = React.useState({});
     const load = async () => { const ks = (await safeList("fb:")).sort().reverse().slice(0, 60); const r = (await Promise.all(ks.map((k) => safeGet(k, true)))).map((v, i) => v && Object.assign(parseObj(v), { key: ks[i] })).filter(Boolean); const o = {}; await Promise.all(r.map(async (q) => { o[q.key] = (await safeList("fv:" + q.key + ":")).length; o["s" + q.key] = await safeGet("fs:" + q.key, true); })); setVt(o); setRows(r); };
     React.useEffect(() => { load(); }, []);
     const send = async () => { const v = t.trim().slice(0, 600); if (!v) return; await safeSet("fb:" + Date.now() + "-" + me.id, JSON.stringify({ u: me.id, w: me.pseudo, t: v, k: tab, ts: Date.now() }), true); setT(""); flash(tab === "admin" ? "Message envoyé à l'admin ✅" : "Merci pour ton idée ✅"); load(); };
@@ -3672,7 +3687,8 @@ function drawFace(g, id, c) {
 async function nameOf(u) { const r = await safeGet("profile:" + u, true); return r ? (parseObj(r).pseudo || "?") : "?"; }
 function ModPanel({ me, onClose, flash }) {
     useBack(true, onClose);
-    const adm = me.id === ADMIN_ID, [tab, setTab] = React.useState("rep"), [reps, setReps] = React.useState(null), [grs, setGrs] = React.useState(null), [mods, setMods] = React.useState([]), [sel, setSel] = React.useState(null), [msgs, setMsgs] = React.useState(null), [nm, setNm] = React.useState({}), [code, setCode] = React.useState("");
+    const [admins, setAdmins] = React.useState([]); React.useEffect(() => { safeGet("admins", true).then((r) => setAdmins(parseList(r))); }, []);
+    const adm = me.id === ADMIN_ID || admins.indexOf(me.id) !== -1, [tab, setTab] = React.useState("rep"), [reps, setReps] = React.useState(null), [grs, setGrs] = React.useState(null), [mods, setMods] = React.useState([]), [sel, setSel] = React.useState(null), [msgs, setMsgs] = React.useState(null), [nm, setNm] = React.useState({}), [code, setCode] = React.useState("");
     const load = async () => {
         const rk = (await safeList("rep:")).sort().reverse().slice(0, 50); setReps((await Promise.all(rk.map((k) => safeGet(k, true)))).map((v, i) => v && Object.assign(parseObj(v), { key: rk[i] })).filter(Boolean));
         const gk = await safeList("group:"); setGrs((await Promise.all(gk.map(async (k) => { const r = await Promise.all([safeGet(k, true), safeGet("gban:" + k.slice(6), true)]); const g = r[0] && parseObj(r[0]); return g ? Object.assign({}, g, { id: k.slice(6), ban: banInfo(r[1]) }) : null; }))).filter(Boolean));
@@ -3694,8 +3710,9 @@ function ModPanel({ me, onClose, flash }) {
             RE("div", { className: "flex gap-2 flex-wrap mb-3" }, bt("Bloquer 24 h", () => ban(sel, 864e5)), bt("Bloquer 7 j", () => ban(sel, 6048e5)), bt("Bloquer (sans limite)", () => ban(sel, 0)), sel.ban && bt("Débloquer", () => unban(sel), "var(--accent)")),
             !msgs ? RE(Loader2, { size: 18, className: "animate-spin" }) : msgs.filter((m) => m.type !== "system").map((m, i) => RE("div", { key: i, className: "text-sm mb-1.5" }, RE("b", null, (nm[m.from] || "?") + " "), m.type === "text" ? m.content : "[" + (m.type || "média") + "]", RE("span", { className: "text-xs", style: { color: "var(--muted)" } }, " · " + timeAgoShort(m.ts)))))
             : RE(React.Fragment, null,
-                RE("div", { className: "flex gap-2 px-4 mb-3" }, bt("🚩 Signalements" + (reps ? " (" + reps.length + ")" : ""), () => setTab("rep"), tab === "rep" ? "var(--accent)" : null), bt("👥 Groupes", () => setTab("grp"), tab === "grp" ? "var(--accent)" : null), adm && bt("🛡️ Modérateurs", () => setTab("mod"), tab === "mod" ? "var(--accent)" : null), adm && bt("⭐ Plus", () => setTab("plus"), tab === "plus" ? "var(--accent)" : null)),
+                RE("div", { className: "flex gap-2 px-4 mb-3" }, bt("🚩 Signalements" + (reps ? " (" + reps.length + ")" : ""), () => setTab("rep"), tab === "rep" ? "var(--accent)" : null), bt("👥 Groupes", () => setTab("grp"), tab === "grp" ? "var(--accent)" : null), me.id === ADMIN_ID && bt("👑 Admins", () => setTab("adm"), tab === "adm" ? "var(--accent)" : null), adm && bt("🛡️ Modérateurs", () => setTab("mod"), tab === "mod" ? "var(--accent)" : null), adm && bt("⭐ Plus", () => setTab("plus"), tab === "plus" ? "var(--accent)" : null)),
                 RE("div", { className: "flex-1 overflow-y-auto px-4 pb-6" },
+                    tab === "adm" && me.id === ADMIN_ID && RE(AdminsAdmin, { flash }),
                     tab === "plus" && adm && RE(PlusAdmin, { flash }),
                     tab === "rep" && (!reps ? RE(Loader2, { size: 18, className: "animate-spin" }) : !reps.length ? RE("div", { className: "text-sm", style: { color: "var(--muted)" } }, "Aucun signalement.") : reps.map((r) => RE("div", { key: r.key, className: "rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("div", { className: "font-semibold" }, (r.vid ? "🎬 " : "Groupe ") + "« " + r.gname + " »"), RE("div", { className: "text-xs mb-1", style: { color: "var(--muted)" } }, "par " + r.byName + " · " + timeAgoShort(r.ts)), r.why, RE("div", { className: "flex gap-2 mt-2" }, r.vid ? bt("Supprimer la vidéo", () => delVid(r)) : bt("Voir le groupe", () => { const g = (grs || []).filter((x) => x.id === r.gid)[0]; g ? open(g) : flash("Groupe supprimé"); }), bt("Classer", () => delRep(r)))))),
                     tab === "grp" && (!grs ? RE(Loader2, { size: 18, className: "animate-spin" }) : grs.map((g) => RE("button", { key: g.id, onClick: () => open(g), className: "w-full text-left rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, RE("b", null, g.name), g.ban ? " 🚫" : "", RE("span", { style: { color: "var(--muted)" } }, " · " + g.members.length + " membres")))),
@@ -3717,6 +3734,20 @@ function PlusSheet({ me, onClose, flash }) {
             on && RE(AccentPicker, null),
             !on && trial === false && RE("button", { onClick: async () => { await safeSet("plus:" + me.id, JSON.stringify({ until: Date.now() + 3 * 864e5, by: "trial", ts: Date.now() }), true); await safeSet("plusTrial", "1", false); setTrial(true); setPl(JSON.stringify({ until: Date.now() + 3 * 864e5 })); flash("Essai Plus de 3 jours activé 🎉"); }, className: "w-full rounded-2xl py-3.5 mt-4 text-sm font-semibold", style: { border: "2px solid #F5B800", color: "var(--fg)" } }, "🎁 Essayer gratuitement 3 jours"),
             !on && (link ? RE(React.Fragment, null, RE("div", { className: "text-center text-lg font-bold mt-4" }, price || "Voir le prix sur la page de paiement"), RE("button", { onClick: go, className: "w-full rounded-2xl py-4 mt-3 text-base font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "S'abonner"), RE("div", { className: "text-xs mt-2 text-center", style: { color: "var(--muted)" } }, "Paiement sécurisé par Stripe. Ton Plus est activé par l'admin après le paiement.")) : RE("div", { className: "text-sm mt-4 text-center", style: { color: "var(--muted)" } }, "L'abonnement n'est pas encore ouvert."))));
+}
+function AdminsAdmin({ flash }) {
+    const [code, setCode] = React.useState(""), [rows, setRows] = React.useState(null);
+    const load = async () => { const ids = parseList(await safeGet("admins", true)); setRows(await Promise.all(ids.map(async (id) => ({ id, w: await nameOf(id) })))); };
+    React.useEffect(() => { load(); }, []);
+    const add = async () => {
+        const id = await safeGet("codeIndex:" + extractCode(code), true); if (!id) { flash("Code introuvable"); return; } if (id === ADMIN_ID) { flash("C'est déjà toi, le propriétaire"); return; }
+        const nm = await nameOf(id); if (!window.confirm("Nommer « " + nm + " » administrateur ?\nIl pourra bloquer des groupes, nommer des modérateurs, gérer Plus et lire les messages envoyés à l'admin.")) return;
+        const l = parseList(await safeGet("admins", true)); if (l.indexOf(id) === -1) await safeSet("admins", JSON.stringify(l.concat([id])), true); setCode(""); flash("👑 " + nm + " est maintenant admin"); load();
+    };
+    const rm = async (id) => { const l = parseList(await safeGet("admins", true)).filter((x) => x !== id); await safeSet("admins", JSON.stringify(l), true); flash("Admin retiré"); load(); };
+    return RE("div", null, RE("div", { className: "text-xs mb-2", style: { color: "var(--muted)" } }, "Tu es le propriétaire. Un admin nommé accède à 🛡️ Modération (groupes, signalements, modérateurs, Plus, messages à l'admin). Il ne peut pas nommer d'autres admins."),
+        (rows || []).map((r) => RE("div", { key: r.id, className: "flex items-center justify-between rounded-2xl p-3 mb-2 text-sm", style: { border: "1px solid var(--line2)" } }, "👑 " + r.w, RE("button", { onClick: () => rm(r.id), className: "rounded-full px-3 py-1.5 text-xs font-semibold", style: { background: "var(--line2)" } }, "Retirer"))),
+        RE("div", { className: "flex gap-2 mt-2" }, RE("input", { value: code, onChange: (e) => setCode(e.target.value), placeholder: "Code ami de la personne", className: "flex-1 rounded-full px-4 py-2 text-sm", style: { background: "transparent", color: "var(--fg)", border: "1px solid var(--line2)" } }), RE("button", { onClick: add, className: "rounded-full px-4 py-2 text-xs font-semibold", style: { background: "var(--accent)", color: "var(--on-accent)" } }, "Nommer admin")));
 }
 function PlusAdmin({ flash }) {
     const [code, setCode] = React.useState(""), [dur, setDur] = React.useState(30), [rows, setRows] = React.useState(null), [link, setLink] = React.useState(""), [price, setPrice] = React.useState("");
@@ -3745,7 +3776,7 @@ function newPhrase() { const a = new Uint32Array(12); crypto.getRandomValues(a);
 function normPhrase(p) { return String(p || "").toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ").trim(); }
 async function exportAccount(me) {
     const keys = await safeList("");
-    const own = ["account:" + me.code, "codeIndex:" + me.code, "profile:" + me.id, "seen:" + me.id, "inbox:" + me.id, "story:" + me.id, "disc:" + me.id, "groups:" + me.id, "pub:" + me.id, "keybak:" + me.id, "vlist:" + me.id, "recovery:" + me.id, "plus:" + me.id];
+    const own = ["account:" + me.code, "codeIndex:" + me.code, "profile:" + me.id, "seen:" + me.id, "inbox:" + me.id, "story:" + me.id, "disc:" + me.id, "groups:" + me.id, "pub:" + me.id, "keybak:" + me.id, "prefsync:" + me.id, "vlist:" + me.id, "recovery:" + me.id, "plus:" + me.id];
     const rel = keys.filter((k) => /^(conv|last|read|unread|streak):/.test(k) && k.indexOf(me.id) !== -1);
     const shared = {}; for (const k of Array.from(new Set(own.concat(rel)))) { const v = await safeGet(k, true); if (v !== null && v !== undefined) shared[k] = v; }
     const local = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^(pv:|st_)/.test(k)) local[k] = localStorage.getItem(k); }
@@ -3824,7 +3855,7 @@ function AccentPicker() {
 function FbWrap({ me, flash, children }) {
     const [o, setO] = React.useState(false), [md, setMd] = React.useState(false), [ps, setPs] = React.useState(false), [sc, setSc] = React.useState(false), [ism, setIsm] = React.useState(me.id === ADMIN_ID);
     React.useEffect(() => { (async () => { const ks = (await safeList("fb:")).filter((k) => k.endsWith("-" + me.id)); const seen = parseObj(await safeGet("fsseen", false)); let ch = false; for (const k of ks) { const st = await safeGet("fs:" + k, true); if (st && seen[k] !== st) { flash("💡 Ton idée est passée : " + st); seen[k] = st; ch = true; } } if (ch) await safeSet("fsseen", JSON.stringify(seen), false); })(); }, []);
-    React.useEffect(() => { safeGet("mods", true).then((r) => { if (parseList(r).indexOf(me.id) !== -1) setIsm(true); }); }, []);
+    React.useEffect(() => { safeGet("mods", true).then((r) => { if (parseList(r).indexOf(me.id) !== -1) setIsm(true); }); safeGet("admins", true).then((r) => { if (parseList(r).indexOf(me.id) !== -1) setIsm(true); }); }, []);
     return RE(React.Fragment, null, children, RE("button", { onClick: () => setSc(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🔐 Sécurité & données"), sc && RE(SecuritySheet, { me, flash, onClose: () => setSc(false) }), RE("button", { onClick: () => setPs(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { background: "linear-gradient(135deg,#F5B800,#FF7A59)", color: "#111" } }, "⭐ Sans-Trace Plus"), ps && RE(PlusSheet, { me, flash, onClose: () => setPs(false) }), ism && RE("button", { onClick: () => setMd(true), className: "mx-5 mb-2 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "🛡️ Modération"), md && RE(ModPanel, { me, flash, onClose: () => setMd(false) }), RE("button", { onClick: () => setO(true), className: "mx-5 mb-3 rounded-2xl py-3 text-sm font-semibold", style: { border: "1px solid var(--line2)", color: "var(--fg)" } }, "💡 Avis, idées & message à l'admin"), o && RE(FeedbackSheet, { me, flash, onClose: () => setO(false) }));
 }
 function BottomNav({ tab, setTab, dot }) {
@@ -4501,11 +4532,12 @@ function ProfileTab({ me, onProfileUpdate, onSettings, onEditCode, flash }) {
 function Home(props) {
     const me = props.me;
     const prefs = props.prefs;
-    const [tab, setTab] = useState("msgs");
+    const [tab, setTab] = useState(() => { try { return sessionStorage.getItem("st_resume") === "compose" ? "stories" : "msgs"; } catch (e) { return "msgs"; } });
     useBack(tab !== "msgs", () => setTab("msgs"));
     const [feedRaw, setFeed] = useState(null);
     const [viewer, setViewer] = useState(null);
-    const [composer, setComposer] = useState(false);
+    const [composer, setComposer] = useState(() => { try { return sessionStorage.getItem("st_resume") === "compose"; } catch (e) { return false; } });
+    useEffect(() => { try { if (composer) sessionStorage.setItem("st_resume", "compose"); else sessionStorage.removeItem("st_resume"); } catch (e) { } }, [composer]);
     const [codeSheet, setCodeSheet] = useState(false);
     const [toast, setToast] = useState("");
     const blocked = prefs.blocked || [];
@@ -7552,13 +7584,46 @@ function Admin({ me, onBack }) {
                     React.createElement("button", { onClick: () => { setTarget(null); setTmpPw(""); }, className: "flex-1 rounded-xl py-3 text-sm font-semibold", style: { background: "var(--card2)" } }, "Annuler"),
                     React.createElement("button", { onClick: run, disabled: busy, className: "flex-1 rounded-xl py-3 text-sm font-semibold", style: { background: target.action === "delete" || target.action === "purge" ? "#FF6B5D" : "var(--accent)", color: "var(--on-accent)" } }, busy ? React.createElement(Loader2, { size: 16, className: "animate-spin inline" }) : "Confirmer")))))));
 }
+/* v5.4.3.2 : réglages synchronisés entre appareils (chiffrés avec la clé privée du compte, restaurée à chaque connexion) */
+async function prefsKey(id) {
+    try {
+        const raw = await safeGet("e2e:priv:" + id, false);
+        if (!raw || !window.crypto || !crypto.subtle) return null;
+        const d = JSON.parse(raw).d;
+        if (!d) return null;
+        const h = await crypto.subtle.digest("SHA-256", te.encode("st-prefs:" + id + ":" + d));
+        return crypto.subtle.importKey("raw", h, "AES-GCM", false, ["encrypt", "decrypt"]);
+    } catch (e) { return null; }
+}
+async function prefsPush(id, obj) {
+    try {
+        const k = await prefsKey(id); if (!k) return;
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, k, te.encode(JSON.stringify(obj)));
+        await safeSet("prefsync:" + id, JSON.stringify({ t: obj._t || 0, iv: u8ToB64(iv), ct: u8ToB64(new Uint8Array(ct)) }), true);
+    } catch (e) { }
+}
+async function prefsPull(id) {
+    try {
+        const raw = await safeGet("prefsync:" + id, true); if (!raw) return null;
+        const k = await prefsKey(id); if (!k) return null;
+        const b = JSON.parse(raw);
+        const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64ToU8(b.iv) }, k, b64ToU8(b.ct));
+        const o = JSON.parse(td.decode(pt));
+        o._t = o._t || b.t || 0;
+        return o;
+    } catch (e) { return null; }
+}
 function App() {
     const [screen, setScreen] = useState("loading");
     const [me, setMe] = useState(null);
     const [openWith, setOpenWith] = useState(null);
     const [prefs, setPrefs] = useState({ theme: "dark", accent: "#2DD4BF", pinned: [], muted: [], blocked: [] });
-    const updatePrefs = (np) => { setPrefs(np); if (me)
-        safeSet("prefs:" + me.id, JSON.stringify(np), false); };
+    const prefSyncT = useRef(null);
+    const updatePrefs = (np) => { np = Object.assign({}, np, { _t: Date.now() }); setPrefs(np); if (me) {
+        safeSet("prefs:" + me.id, JSON.stringify(np), false);
+        clearTimeout(prefSyncT.current); const uid = me.id; prefSyncT.current = setTimeout(() => prefsPush(uid, np), 1500);
+    } };
     const [kickMsg, setKickMsg] = useState("");
     const [callReq, setCallReq] = useState(null);
     const [showNews, setShowNews] = useState(false);
@@ -7590,8 +7655,20 @@ function App() {
             return;
         (() => __awaiter(this, void 0, void 0, function* () {
             const rp = yield safeGet("prefs:" + me.id, false);
-            if (rp)
-                setPrefs(Object.assign({ theme: "dark", accent: "#2DD4BF", pinned: [], muted: [], blocked: [] }, JSON.parse(rp)));
+            const dflt = { theme: "dark", accent: "#2DD4BF", pinned: [], muted: [], blocked: [] };
+            let loc = null; try { loc = rp ? JSON.parse(rp) : null; } catch (e) { loc = null; }
+            if (loc) setPrefs(Object.assign({}, dflt, loc));
+            const sync = () => __awaiter(this, void 0, void 0, function* () {
+                const rem = yield prefsPull(me.id); if (!rem) { if (loc && !loc._t) { /* premier envoi */ } return; }
+                const cur = parseObj(yield safeGet("prefs:" + me.id, false));
+                if ((rem._t || 0) > (cur._t || 0)) {
+                    yield safeSet("prefs:" + me.id, JSON.stringify(rem), false);
+                    setPrefs(Object.assign({}, dflt, rem));
+                } else if ((cur._t || 0) > (rem._t || 0)) prefsPush(me.id, cur);
+            });
+            yield sync();
+            if (loc && loc._t && !(yield safeGet("prefsync:" + me.id, true))) prefsPush(me.id, loc);
+            window.__stPrefSync = sync;
         }))();
     }, [me && me.id]);
     useEffect(() => {
@@ -7980,6 +8057,16 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
     draw(); document.body.appendChild(ov);
   }
   window.__startTour = tour;
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && window.__stPrefSync) { try { window.__stPrefSync(); } catch (e) { } } });
+  document.addEventListener("input", function (e) {
+    var el = e.target; if (!el || el.tagName !== "INPUT" || el.type === "password") return;
+    var ph = el.placeholder || ""; if (!/code|K7XQ2P/i.test(ph) || /pin|promo|secours/i.test(ph)) return;
+    var v = el.value, u = v.toUpperCase(); if (v === u) return;
+    var pos = el.selectionStart, set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set; set.call(el, u);
+    try { el.setSelectionRange(pos, pos); } catch (x) { } el.dispatchEvent(new Event("input", { bubbles: true }));
+  }, true);
+  document.addEventListener("focusin", function (e) { var el = e.target; if (el && el.tagName === "INPUT" && el.type !== "password" && /code|K7XQ2P/i.test(el.placeholder || "") && !/pin|promo|secours/i.test(el.placeholder)) { el.setAttribute("autocapitalize", "characters"); el.setAttribute("autocorrect", "off"); el.style.textTransform = "uppercase"; } });
+  try { if (sessionStorage.getItem("st_resume") === "compose") setTimeout(function () { var d = document.createElement("div"); d.textContent = "L'appli a été rechargée par ton téléphone pendant le choix du fichier. Choisis à nouveau ta photo ou vidéo (ferme les autres applis si ça recommence)."; d.style.cssText = "position:fixed;left:12px;right:12px;top:12px;z-index:400;padding:12px 14px;border-radius:14px;background:#222;color:#fff;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.4)"; document.body.appendChild(d); setTimeout(function () { d.remove(); }, 7000); }, 1500); } catch (e) { }
   var vl = document.createElement("div"); vl.id = "stVer"; vl.setAttribute("aria-hidden", "true"); vl.textContent = "v5.4.3.2"; vl.style.cssText = "position:fixed;right:6px;bottom:2px;font-size:8px;opacity:.35;pointer-events:none;z-index:9999;color:var(--fg,#fff)"; document.body.appendChild(vl);
   setInterval(function () { if (!localStorage.getItem("st_tour") && localStorage.getItem("pv:profile") && !document.getElementById("stTour")) tour(); }, 1500);
 })();
@@ -8007,6 +8094,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
   t("recherche : ignore les données binaires", function () { eq(filterMessages([{ ts: now, content: "data:audio/webm;base64,AAAA" }], "audio").length, 0); });
   t("forme d'onde : taille et normalisation", function () { var p = computePeaks(Float32Array.from({ length: 3600 }, function (_, i) { return Math.sin(i / 20) * (i / 3600); }), 36); eq(p.length, 36); eq(Math.max.apply(null, p), 1); eq(p.every(function (v) { return v >= 0 && v <= 1; }), true); });
   t("stories vidéo : expirées exclues, actives gardées", function () { var raw = JSON.stringify([{ id: "a", ts: now, st: 1, n: 1 }, { id: "b", ts: now - 3e8, st: 1, n: 1 }, { id: "c", ts: now, n: 1 }]), r = vidStories(raw); eq(r.length, 1); eq(r[0].id, "a"); eq(r[0].k, "vid"); });
+  t("réglages multi-appareils : chiffrement aller-retour", async function () { var id = "__t1"; await safeSet("e2e:priv:" + id, JSON.stringify({ d: "abc123" }), false); await prefsPush(id, { theme: "dark", blocked: ["x"], _t: 5 }); var r = await prefsPull(id); eq(r.blocked, ["x"]); eq(r._t, 5); await safeDelete("prefsync:" + id, true); await safeDelete("e2e:priv:" + id, false); });
   t("identifiant de conversation symétrique", function () { eq(convId("a", "b"), convId("b", "a")); });
   t("version affichée dans l'appli", function () { eq(document.body.innerText.indexOf("v5.4.3.2") !== -1 || !!document.getElementById("stVer"), true); });
   async function run(box) {
